@@ -8,13 +8,12 @@ import os
 import torch
 import numpy as np
 
-from ..myUtils.progress_bars import ProgressBarMultiColor
+from flamingchoripan.progress_bars import ProgressBarMultiColor
 from . import utils as tfutils
-from .. import myUtils
-from ..myUtils import time
-from ..myUtils import files
-from ..myUtils import strings
-from ..myUtils import prints
+from flamingchoripan import times
+from flamingchoripan import files
+from flamingchoripan import strings
+from flamingchoripan import prints
 from .losses import get_loss_from_losses, get_loss_text
 from . import train_handlers as thandles
 from . import exceptions as exc

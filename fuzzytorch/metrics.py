@@ -4,13 +4,7 @@ from . import C_
 
 import torch
 
-class NewMetricCrit:
-	def __init__(self, name, fun, kwargs={}):
-		self.name = name
-		self.fun = fun
-		self.kwargs = kwargs
-
-############# METRICS ZOO
+###################################################################################################################################################
 
 def onehot_accuracy(y_pred, y_target,
 	target_is_onehot:bool=True,
@@ -30,6 +24,18 @@ def onehot_accuracy(y_pred, y_target,
 	accuracy = torch.mean(accuracies)
 	return accuracy
 
-def dummy_accuracy(y_pred, y_target,
+###################################################################################################################################################
+
+class FTMetric():
+	def __init__(self, name, **kwargs):
+		self.name = name
+		for key in kwargs.keys():
+			setattr(self, key, kwargs[key])
+
+class DummyAccuracy(FTMetric):
+	def __init__(self, name,
 	**kwargs):
-	return torch.ones((1))*0.666
+		self.name = name
+
+	def __call__(self):
+		return torch.ones((1))*0.666

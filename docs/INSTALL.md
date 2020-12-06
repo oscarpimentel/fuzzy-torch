@@ -27,17 +27,6 @@ To install:
 conda install -c conda-forge notebook
 ```
 
-### Pytorch
-
-```bash
-nvidia-smi
-nvcc -V
-```
-
-```bash
-conda install pytorch=1.4.0 torchvision cudatoolkit=10.1 -c pytorch
-```
-
 ## References
 - https://www.anaconda.com/distribution/
 - https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html

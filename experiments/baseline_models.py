@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from flamingChoripan.tinyFlame.models import MLP, Conv2DLinear
+from fuzzytorch.models.basics import MLP, Conv2DLinear
 import numpy as np
 
 class MLPClassifier(nn.Module):
