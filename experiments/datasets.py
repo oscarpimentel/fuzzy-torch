@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 import random
-from fuzzytorch.datasets import TensorDict
+from fuzzytorch.utils import TensorDict
 
 class MyDataset(Dataset):
 	def __init__(self, x:np.ndarray, y:np.ndarray,
@@ -57,7 +57,7 @@ class MyDataset(Dataset):
 		#print(f'mean: {mean.shape} - std: {std.shape}')
 		x = (x-mean)/(std+eps) # (c,h,w)
 		return x
-	
+
 	def apply_da(self, x:torch.Tensor):
 		if not self.uses_da:
 			return x # just return
@@ -79,7 +79,7 @@ class MyDataset(Dataset):
 		x = self.apply_da(x) # (c,h,w)
 		y = self.y[idx] # (N) > ()
 		tensor_dict = TensorDict({
-			'data':TensorDict({'x':x, 'x2':x[0][0]}),
+			'input':TensorDict({'x':x, 'x2':x[0][0]}),
 			'target':TensorDict({'y':y, 'y2':y[None],}),
 			})
 		return tensor_dict

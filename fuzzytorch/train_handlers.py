@@ -5,35 +5,34 @@ from . import C_
 import os
 import torch.nn as nn
 import numpy as np
-from . import losses
-from . import metrics
-from . import optimizers
-from .models import count_parameters
-from . import exceptions as exc
-from ..myUtils import files
+from . import losses as ft_losses
+from . import metrics as ft_metrics
+from . import optimizers as ft_optimizers
+from .models.utils import count_parameters
+from . import exceptions as ex
+import flamingchoripan.files
 
 ###################################################################################################################################################
 
 class NewTrainHandler(object):
-	def __init__(self, name:str, model, optimizer, loss_crit, metric_crits,
+	def __init__(self, optimizer, loss, metrics,
 		early_stop_epochcheck_epochs:int=1,
 		early_stop_patience_epochchecks:int=1000,
 		save_mode:str=C_.SM_NO_SAVE,
 		target_metric_crit:str=None,
 		**kwargs):
-		assert isinstance(model, nn.Module)
-		assert isinstance(optimizer, optimizers.NewOptimizer)
-		assert isinstance(loss_crit, losses.NewLossCrit)
-		assert isinstance(metric_crits, list) or isinstance(metric_crits, metrics.NewMetricCrit)
+		assert isinstance(loss, ft_losses.FTLoss)
+		assert isinstance(metrics, list) and all([isinstance(metric, ft_metrics.FTMetric) for metric in metrics])
+		assert isinstance(optimizer, ft_optimizers.NewOptimizer)
 		assert early_stop_epochcheck_epochs>=1
 		assert early_stop_patience_epochchecks>=2
 
 		### ATTRIBUTES
-		self.name = name
-		self.model = model
 		self.optimizer = optimizer
-		self.loss_crit = loss_crit
-		self.metric_crits = metric_crits
+		self.loss = loss
+		self.metrics = metrics
+		self.name = loss.name
+
 		self.early_stop_epochcheck_epochs = early_stop_epochcheck_epochs
 		self.early_stop_patience_epochchecks = early_stop_patience_epochchecks
 		self.save_mode = save_mode
@@ -92,31 +91,28 @@ class NewTrainHandler(object):
 	def need_to_save(self):
 		return not self.save_mode==C_.SM_NO_SAVE
 
-	def print_info(self):
-		print(f'[th:{self.name}]')
-		print(f'\topt parameters: {self.optimizer.get_count_parameters():,}[p]')
-		metric_info = f'(target_metric_crit: {self.target_metric_crit})' if self.save_mode in [C_.SM_ONLY_INF_METRIC, C_.SM_ONLY_SUP_METRIC] else ''
-		print(f'\tsave mode: {self.save_mode}{metric_info} - device: {next(self.model.parameters()).device}')
-		print(f'\tearly_stop_epochcheck_epochs: {self.early_stop_epochcheck_epochs} - early_stop_patience_epochchecks: {self.early_stop_patience_epochchecks}')
+	def get_metrics_repr(self):
+		return f'(target_metric_crit: {self.target_metric_crit})' if self.save_mode in [C_.SM_ONLY_INF_METRIC, C_.SM_ONLY_SUP_METRIC] else ''
+
+	def __repr__(self):
+		txt = ''
+		txt += f'[{self.name}]'+'\n'
+		txt += f' - opt-parameters: {len(self.optimizer):,}[p] - device: {self.optimizer.device()}'+'\n'
+		txt += f' - save-mode: {self.save_mode}{self.get_metrics_repr()}'+'\n'
+		txt += f' - early_stop_epochcheck_epochs: {self.early_stop_epochcheck_epochs} - early_stop_patience_epochchecks: {self.early_stop_patience_epochchecks}'+'\n'
+		return txt[:-1]
 
 	def set_last_saved_filedir(self, last_saved_filedir):
 		self.last_saved_filedir = last_saved_filedir
 
 	def set_metrics_hist(self):
-		if isinstance(self.metric_crits, metrics.NewMetricCrit): # transform to list
-			self.metric_crits = [self.metric_crits]
-
-		self.metric_crits_names = [m.name for m in self.metric_crits]
+		self.metric_crits_names = [m.name for m in self.metrics]
 		self.history_dict['metrics_evolution_epochcheck'] = {
 			'train':{mn:[] for mn in self.metric_crits_names},
 			'val':{mn:[] for mn in self.metric_crits_names},
 		}
-		self.target_metric_crit = self.metric_crits_names[0] if self.target_metric_crit is None and len(self.metric_crits)>0 else self.target_metric_crit # by default
-
-	def nan_check(self, loss):
-		if np.any(np.isnan(loss)) or np.any(loss==np.infty) or np.any(loss==-np.infty):
-			raise exc.NanLossException()
-
+		self.target_metric_crit = self.metric_crits_names[0] if self.target_metric_crit is None and len(self.metrics)>0 else self.target_metric_crit # by default
+		
 	def early_stop_check(self):
 		if self.epochcheck_counter >= self.early_stop_patience_epochchecks:
 			raise exc.TrainingStopException()
@@ -127,6 +123,12 @@ class NewTrainHandler(object):
 	def reset_early_stop(self):
 		#print('reset')
 		self.epochcheck_counter = 0
+
+	def train(self):
+		self.optimizer.train()
+
+	def eval(self):
+		self.optimizer.eval()
 
 	def can_be_evaluated(self):
 		return self.epoch_counter >= self.early_stop_epochcheck_epochs
@@ -140,10 +142,6 @@ class NewTrainHandler(object):
 		self.optimizer.epoch_update()
 		self.epoch_counter += 1
 		#print('epoch_counter',self.epoch_counter)
-
-	def mount_model(self, gpu):
-		self.model.to(gpu) # model to GPU
-		self.optimizer.generate_mounted_optimizer(self.model)
 
 	def get_mins_per_epoch(self):
 		mins_per_epoch = self.history_dict['mins_evolution_epoch']['train']

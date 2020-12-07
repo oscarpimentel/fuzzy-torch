@@ -9,68 +9,78 @@ import torch
 import numpy as np
 
 from flamingchoripan.progress_bars import ProgressBarMultiColor
-from . import utils as tfutils
+from .datasets import TensorDict
+from flamingchoripan import C_ as C_fc
 from flamingchoripan import times
 from flamingchoripan import files
 from flamingchoripan import strings
 from flamingchoripan import prints
-from .losses import get_loss_from_losses, get_loss_text
-from . import train_handlers as thandles
-from . import exceptions as exc
+import warnings
+from . import train_handlers as ths
+from . import exceptions as ex
 
 ###################################################################################################################################################
 
-class ModelsTrainHandler(object):
-	def __init__(self, model_name:str, train_handlers:list,
-		**kwargs):
-		# ATTRIBUTES
-		setattr(self, 'model_name', model_name)
-		setattr(self, 'train_handlers', train_handlers)
-		setattr(self, 'save_dir', 'save')
-		setattr(self, 'id', 0)
-		setattr(self, 'epochs_max', int(1e4))
-		setattr(self, 'main_color', 'gray')
-		for name, val in kwargs.items():
-			setattr(self, name, val)
-		assert isinstance(train_handlers, list) or isinstance(train_handlers, thandles.NewTrainHandler)
-		if isinstance(train_handlers, thandles.NewTrainHandler):
-			self.train_handlers = [self.train_handlers]
+class ModelTrainHandler(object):
+	def __init__(self, model, train_handlers:list,
+		save_rootdir='../save/',
+		id=0,
+		epochs_max=1e4,
+		uses_train_eval_loader_methods=False,
+		delete_all_previous_epochs_files:bool=True,
+		):
+		if isinstance(train_handlers, ths.NewTrainHandler):
+			train_handlers = [train_handlers]
+		assert isinstance(train_handlers, list) and all([isinstance(train_handler, ths.NewTrainHandler) for train_handler in train_handlers])
 
-		print(strings.get_bar(char=myUtils.C_.BOT_SQUARE_CHAR))
-		print(f'save dir: {self.save_dir}/{self.model_name}')
-		prints.print_blue(f'model name: {self.model_name} (id: {self.id})')
+		self.model = model
+		self.train_handlers = train_handlers
+		self.save_rootdir = save_rootdir
+		self.complete_save_roodir = f'{self.save_rootdir}/{self.model.get_name()}'
+		self.id = id
+		self.epochs_max = int(epochs_max)
+		self.uses_train_eval_loader_methods = uses_train_eval_loader_methods
+		self.delete_all_previous_epochs_files = delete_all_previous_epochs_files
+
+		self.device = 'cpu'
+		self.device_name = 'cpu'
 
 	def clean_cache(self):
-		if self.cuda:
+		if self.uses_gpu:
 			torch.cuda.empty_cache()
 
 	def build_gpu(self,
 		gpu_index:int=0,
 		):
-		self.cuda = torch.cuda.is_available()
-		if gpu_index is None or gpu_index<0 or not self.cuda: # CPU
-			prints.print_green('There is not CUDA nor GPUs... Using CPU >:(')
-			self.GPU = 'cpu'
-		else: # GPU
-			tfutils.print_gpu_info()
-			self.GPU = torch.device(f'cuda:{gpu_index}')
-			prints.print_green(f'Using: {self.GPU} ({torch.cuda.get_device_name(gpu_index)})')
+		self.uses_gpu = torch.cuda.is_available()
+		if gpu_index is None or gpu_index<0 or not self.uses_gpu: # is CPU
+			warnings.warn('there is not CUDA nor GPUs... Using CPU >:(')
+		else: # is GPU
+			self.device_name = torch.cuda.get_device_name(gpu_index)
+			self.device = torch.device(f'cuda:{gpu_index}')
+		
+		self.model.to(self.device)
 
+	def __repr__(self):
+		txt = ''
+		txt += strings.get_bar(char=C_fc.BOT_SQUARE_CHAR) + '\n'
+		txt += strings.color_str(f'model_name: {self.model.get_name()} - id: {self.id}', 'blue') + '\n'
+		txt += strings.color_str(f'device: {self.device} - device_name: {self.device_name}', 'green') + '\n'
+		txt += f'save_rootdir: {self.complete_save_roodir}' + '\n'
 		for trainh in self.train_handlers:
-			trainh.mount_model(self.GPU) # model to GPU
-			trainh.print_info()
+			txt += str(trainh) + '\n'
+		return txt
 
 	def training_save_model(self, epoch, set_name):
-		saved_filedir= None
+		saved_filedir = None
 		# check is can be saved
-		can_save_model = sum([int(trainh.check_save_condition(set_name)) for trainh in self.train_handlers])>0
+		can_save_model = any([trainh.check_save_condition(set_name) for trainh in self.train_handlers])
 		if can_save_model:
-			new_folder = f'{self.save_dir}/{self.model_name}'
-			files.create_dir(new_folder, verbose=0)
-			saved_filedir = f'{new_folder}/id{C_.KEY_VALUE_SEP_CHAR}{self.id}{C_.KEY_KEY_SEP_CHAT}epoch{C_.KEY_VALUE_SEP_CHAR}{epoch}.{C_.SAVE_FEXT}'
+			files.create_dir(self.complete_save_roodir, verbose=0)
+			saved_filedir = f'{self.complete_save_roodir}/id{C_.KEY_VALUE_SEP_CHAR}{self.id}{C_.KEY_KEY_SEP_CHAT}epoch{C_.KEY_VALUE_SEP_CHAR}{epoch}.{C_.SAVE_FEXT}'
 
 			dic_to_save = {
-				'state_dict':{trainh.name:trainh.model.state_dict() for trainh in self.train_handlers},
+				'state_dict':self.model.state_dict(),
 				'train_handler':{trainh.name:trainh.history_dict for trainh in self.train_handlers},
 			}
 			torch.save(dic_to_save, saved_filedir) # SAVE MODEL
@@ -81,57 +91,47 @@ class ModelsTrainHandler(object):
 
 		return saved_filedir
 
-	def evaluate_in_set(self, set_name:str, set_loader, model_kwargs:dict):
-		eval_cr = time.Cronometer()
+	def evaluate_in_set(self, set_name:str, set_loader, model_kwargs:dict,
+		):
+		eval_cr = times.Cronometer()
 		text = None
 		evaluated = False
-		with torch.no_grad():	
+		with torch.no_grad():
 			for trainh in self.train_handlers:
 				if trainh.can_be_evaluated():
 					if text is None:
 						text = f'[{set_name}]'
 
 					evaluated = True
-					set_finalloss = []
-					set_sublosses = {sln:[] for sln in trainh.get_sublosses_names()}
+					set_loss = []
 					set_metrics = {mcn:[] for mcn in trainh.metric_crits_names}
-					set_loader.eval() # dataset eval mode!
-					trainh.model.eval() # model eval mode!
-					for k,(data_, target_) in enumerate(set_loader):
-						data, target = tfutils.get_data_target_gpu(data_, target_, self.GPU) # mount data in gpu
-						pred = trainh.model(data, **model_kwargs)
-						loss, _, sublosses_dic = get_loss_from_losses(trainh.loss_crit, pred, target)
-						set_finalloss.append(loss.item())
+					if self.uses_train_eval_loader_methods:
+						set_loader.eval() # dataset eval mode!
+					self.model.eval() # model eval mode!
+					for k,in_tensor_dict in enumerate(set_loader): # batches loop
+						out_tensor_dict = self.model(in_tensor_dict.to(self.device), **model_kwargs)
+						loss = trainh.loss(out_tensor_dict)
+						set_loss.append(loss)
+						for metric in trainh.metrics:
+							set_metrics[metric.name].append(metric(out_tensor_dict))
 
-						for subloss_name in sublosses_dic.keys():
-							set_sublosses[subloss_name].append(sublosses_dic[subloss_name].item())
-
-						for metric in trainh.metric_crits:
-							set_metrics[metric.name].append(metric.fun(pred, target, **metric.kwargs).item())
-
-					set_finalloss = np.mean(set_finalloss)
-					set_sublosses = {sln:np.mean(set_sublosses[sln]) for sln in trainh.get_sublosses_names()}
-					set_metrics = {mcn:np.mean(set_metrics[mcn]) for mcn in trainh.metric_crits_names}
-
+					set_loss = sum(set_loss)/len(set_loss)
+					
 					## SET LOSS TO HYSTORY
-					trainh.history_dict['finalloss_evolution_epochcheck'][set_name].append(set_finalloss)
-					text += f'[th:{trainh.name}] *loss*: {get_loss_text(set_finalloss)}'
+					trainh.history_dict['finalloss_evolution_epochcheck'][set_name].append(set_loss.get_loss())
+					text += f'[{trainh.name}] *loss*: {loss}'
 
 					## SET SUBLOSSES TO HYSTORY
-					sublosses_text = []
-					for subloss_name in set_sublosses.keys():
-						trainh.add_subloss_history('sublosses_evolution_epochcheck', set_name, subloss_name, set_sublosses[subloss_name])
-						sublosses_text.append(get_loss_text(set_sublosses[subloss_name]))
-					if len(sublosses_text)>0:
-						text += f'={"+".join(sublosses_text)}'
+					for subloss_name in set_loss.get_sublosses_names():
+						trainh.add_subloss_history('sublosses_evolution_epochcheck', set_name, subloss_name, set_loss.get_subloss(subloss_name))
 
 					## SET METRICS TO HYSTORY
 					for metric_name in set_metrics.keys():
-						metric_value = set_metrics[metric_name]
-						trainh.history_dict['metrics_evolution_epochcheck'][set_name][metric_name].append(metric_value)
-						text += f' - {metric_name}: {metric_value:.5f}'
+						metric_res = sum(set_metrics[metric_name])/len(set_metrics[metric_name])
+						trainh.history_dict['metrics_evolution_epochcheck'][set_name][metric_name].append(metric_res.get_metric())
+						text += f' - {metric_name}: {metric_res}'
 
-					text += f' (eval_time: {eval_cr.dt_mins():.4f}[mins])'
+					text += f' (eval-time: {eval_cr.dt_mins():.4f}[mins])'
 
 		return text, evaluated
 
@@ -140,69 +140,73 @@ class ModelsTrainHandler(object):
 		):
 		bar(text_dic, update)
 
+	def create_dir(self):
+		if any([int(trainh.need_to_save()) for trainh in self.train_handlers]):
+			files.create_dir(self.complete_save_roodir, verbose=1)
+
+	def delete_filedirs(self):
+		if self.delete_all_previous_epochs_files:
+			to_delete_filedirs = [f for f in files.get_filedirs(self.complete_save_roodir) if files.get_dict_from_filedir(f)['id']==str(self.id)]
+			if len(to_delete_filedirs)>0:
+				epochs_to_delete = [int(files.get_dict_from_filedir(f)['epoch']) for f in to_delete_filedirs]
+				prints.print_red(f'> deleting previous epochs {epochs_to_delete} in: {self.complete_save_roodir} (id: {self.id})')
+				files.delete_filedirs(to_delete_filedirs, verbose=0)
+
 	def fit_loader(self, train_loader, val_loader,
 		model_kwargs:dict={},
 		load:bool=False,
 		k_every:int=1,
-		delete_all_previous_epochs_files:bool=True,
 		**kwargs):
 
 		if load:
 			self.load_model()
 			return True
 
-		complete_save_dir = f'{self.save_dir}/{self.model_name}'
-		if not os.path.isdir(complete_save_dir):
-			if sum([int(trainh.need_to_save()) for trainh in self.train_handlers])>0: # at least one
-				files.create_dir(complete_save_dir, verbose=1)
-
-		if delete_all_previous_epochs_files:
-			to_delete_filedirs = files.get_filedirs(complete_save_dir)
-			to_delete_filedirs = [f for f in to_delete_filedirs if files.get_dict_from_filedir(f)['id']==str(self.id)]
-			if len(to_delete_filedirs)>0:
-				epochs_to_delete = [int(files.get_dict_from_filedir(f)['epoch']) for f in to_delete_filedirs]
-				prints.print_red(f'> deleting previous epochs {epochs_to_delete} in: {complete_save_dir} (id: {self.id})')
-				files.delete_filedirs(to_delete_filedirs, verbose=0)
+		self.create_dir()
+		self.delete_filedirs()
 
 		### TRAINING - BACKPROP
 		print(strings.get_bar())
 		total_dataloader_k = len(train_loader)
 		training_bar = ProgressBarMultiColor(self.epochs_max*total_dataloader_k, ['train', 'eval_train', 'eval_val', 'early_stop'], [None, 'blue', 'red', 'yellow'])
 		bar_text_dic = {}
-		global_train_cr = time.Cronometer()
+		global_train_cr = times.Cronometer()
 		can_be_in_loop = True
 		end_with_nan = False
-		for ke,epoch in enumerate(range(1, self.epochs_max+1)): # FOR EPOCHS
+		for ke,epoch in enumerate(range(1, self.epochs_max+1)): # for epochs
 			model_kwargs.update({'epoch':epoch})
 			try:
 				if can_be_in_loop:
 					#with torch.autograd.detect_anomaly(): # really useful but slow af
-					train_cr = {trainh.name:time.Cronometer() for trainh in self.train_handlers}
-					train_loader.train() # dataset train mode!
-					for k,(data_, target_) in enumerate(train_loader):
-						backprop_text = f'id: {self.id} - epoch: {epoch}/{self.epochs_max}({k:d}/{total_dataloader_k:d})'
+					train_cr = {trainh.name:times.Cronometer() for trainh in self.train_handlers}
+					if self.uses_train_eval_loader_methods:
+						train_loader.train() # dataset train mode!
+
+					for k,in_tensor_dict in enumerate(train_loader): # batches loop
+						assert isinstance(in_tensor_dict, TensorDict)
+						backprop_text = f'id: {self.id} - epoch: {epoch}/{self.epochs_max}({k:,}/{total_dataloader_k:,})'
 						losses_text_list = []
 						for kt,trainh in enumerate(self.train_handlers):
 							trainh.history_dict['ks_epochs'] = total_dataloader_k
 							trainh.history_dict['k_every'] = k_every
-							[trainh_aux.model.eval() for trainh_aux in self.train_handlers] # freeze all other models except actual
+							for trainh_aux in self.train_handlers: # freeze all other models except actual
+								trainh_aux.eval() 
 
-							data, target = tfutils.get_data_target_gpu(data_, target_, self.GPU) # mount data in gpu
-							trainh.model.train() # model train mode!
+							trainh.train() # model train mode!
 							trainh.optimizer.zero_grad() # set gradient to 0
-							pred = trainh.model(data, **model_kwargs) # Feed forward
-							loss, loss_text, sublosses_dic = get_loss_from_losses(trainh.loss_crit, pred, target)
-							loss.backward() # gradient calculation
+							out_tensor_dict = self.model(in_tensor_dict.to(self.device), **model_kwargs) # Feed forward
+							loss = trainh.loss(out_tensor_dict)
+							#loss, loss_text, sublosses_dic = get_loss_from_losses(trainh.loss_crit, pred, target)
+							loss.get_loss(numpy=False).backward() # gradient calculation
 							trainh.optimizer.step() # step gradient
-							trainh.nan_check(loss.item())
 
-							losses_text_list.append(f'[th:{trainh.name}] *loss*: {loss_text}')
+							losses_text_list.append(f'[{trainh.name}] *loss*: {loss}')
 							
 							### SET LOSS TO HYSTORY ONLY EVERY k_every ITERATIONS
 							if k%k_every==0:
-								trainh.history_dict['finalloss_evolution_k']['train'].append(loss.item())
-								for subloss_name in sublosses_dic.keys():
-									trainh.add_subloss_history('sublosses_evolution_k', 'train', subloss_name, sublosses_dic[subloss_name].item())
+								trainh.history_dict['finalloss_evolution_k']['train'].append(loss.get_loss())
+								for subloss_name in loss.get_sublosses_names():
+									trainh.add_subloss_history('sublosses_evolution_k', 'train', subloss_name, loss.get_subloss(subloss_name))
 						### TEXT
 						bar_text_dic['train'] = backprop_text + ''.join(losses_text_list)
 						self.update_bar(training_bar, bar_text_dic, True)
@@ -233,7 +237,7 @@ class ModelsTrainHandler(object):
 					text = f'[stop]'
 					for trainh in self.train_handlers:
 						trainh.early_stop_check() # raise exception
-						text += f'[th:{trainh.name}] epoch_counter: ({trainh.epoch_counter}/{trainh.early_stop_epochcheck_epochs}) - patience: ({trainh.epochcheck_counter}/{trainh.early_stop_patience_epochchecks})'
+						text += f'[{trainh.name}] epoch_counter: ({trainh.epoch_counter}/{trainh.early_stop_epochcheck_epochs}) - patience: ({trainh.epochcheck_counter}/{trainh.early_stop_patience_epochchecks})'
 					
 					bar_text_dic['early_stop'] = text
 					self.update_bar(training_bar, bar_text_dic)
@@ -243,12 +247,12 @@ class ModelsTrainHandler(object):
 						saved_filedir = self.training_save_model(epoch, 'val')
 						self.update_bar(training_bar, bar_text_dic)
 
-			except exc.NanLossException as e:
+			except ex.NanLossError as e:
 				can_be_in_loop = False
 				end_with_nan = True
 				self.escape_training(training_bar, '*** nan loss ***')
 
-			except exc.TrainingStopException as e:
+			except ex.TrainingInterruptedError as e:
 				can_be_in_loop = False
 				self.escape_training(training_bar, '*** early stopping ***')
 
@@ -263,7 +267,7 @@ class ModelsTrainHandler(object):
 			text = f'[th:{trainh.name}] best epoch: {trainh.get_best_epoch()} - convergence time: {trainh.get_mins_to_convergence():.4f}[mins]'
 			text += f' - time per epoch: {trainh.get_mins_per_epoch():.4f}[mins]'
 			print(text)
-		print(strings.get_bar(char=myUtils.C_.TOP_SQUARE_CHAR))
+		print(strings.get_bar(char=C_fc.TOP_SQUARE_CHAR))
 		no_error_train = not end_with_nan
 		return no_error_train
 

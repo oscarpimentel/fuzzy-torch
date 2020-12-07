@@ -4,8 +4,10 @@ from . import C_
 
 import torch
 import torch.nn.functional as F
+from .datasets import TensorDict
+from flamingchoripan.strings import xstr
+from . import exceptions as ex
 import numpy as np
-from . import losses
 
 ###################################################################################################################################################
 
@@ -47,31 +49,67 @@ def batch_crossentropy(y_pred, y_target,
 
 	return batch_loss # (b,...)
 
-def get_loss_text(loss, round_decimals:int=C_.LOSS_DECIMALS):
-	f = '{:.'+str(round_decimals)+'f}'
-	return f.format(loss)
+###################################################################################################################################################
 
-def get_loss_from_losses(loss_crit, pred, target, round_decimals:int=C_.LOSS_DECIMALS):
-	assert isinstance(loss_crit, losses.NewLossCrit)
-	
-	f_ret = loss_crit.fun(pred, target, **loss_crit.kwargs)
-	assert isinstance(f_ret, list) or isinstance(f_ret, tuple)
-	assert len(f_ret)==2
+class LossResult():
+	def __init__(self, batch_loss,
+		reduction_mode='mean',
+		):
+		assert len(batch_loss.shape)<=1
+		self.reduction_mode = reduction_mode
+		self.batch_sublosses = {}
+		if self.reduction_mode=='mean':
+			self.batch_loss = batch_loss.mean()
 
-	finalloss, sublosses_dic = f_ret
-	assert len(finalloss.shape)==0 # just 1 value tensor
+	def add_subloss(self, name, batch_subloss):
+		assert len(batch_subloss.shape)<=1
+		self.batch_sublosses[name] = batch_subloss.mean()
 
-	final_loss_test = get_loss_text(finalloss, round_decimals)
-	sublosses_text = []
-	for key in sublosses_dic.keys():
-		assert len(sublosses_dic[key].shape)==0 # just 1 value tensor
-		sublosses_text.append(get_loss_text(sublosses_dic[key], round_decimals))
+	def get_loss(self,
+		numpy=True,
+		):
+		numpy_loss = self.batch_loss.item()
+		if np.any(np.isnan(numpy_loss)) or np.any(numpy_loss==np.infty) or np.any(numpy_loss==-np.infty):
+			raise ex.NanLossException()
+		return numpy_loss if numpy else self.batch_loss
 
-	final_loss_test = f'{final_loss_test}'
-	if len(sublosses_text)>0:
-		final_loss_test +=f'={"+".join(sublosses_text)}'
+	def get_subloss(self, name,
+		numpy=True,
+		):
+		return self.batch_sublosses[name].item() if numpy else self.batch_sublosses[name]
 
-	return finalloss, final_loss_test, sublosses_dic
+	def get_sublosses_names(self):
+		return list(self.batch_sublosses.keys())
+
+	def __len__(self):
+		return len(self.batch_sublosses.keys())
+
+	def __repr__(self):
+		lv = f'{xstr(self.get_loss())}'
+		batch_sublosses = self.batch_sublosses.keys()
+		slv = '+'.join([xstr(self.get_subloss(batch_subloss)) for batch_subloss in batch_sublosses])
+		slvn = '+'.join([batch_subloss for batch_subloss in batch_sublosses])
+		return f'{lv}={slv}({slvn})' if len(self)>0 else f'{lv}'
+
+	def __add__(self, other):
+		if other==0:
+			return self
+		elif self==0:
+			return other
+		else:
+			loss = LossResult(self.batch_loss+other.batch_loss)
+			for sl_name in self.get_sublosses_names():
+				loss.add_subloss(sl_name, self.batch_sublosses[sl_name]+other.batch_sublosses[sl_name])
+			return loss
+
+	def __radd__(self, other):
+		return self+other
+
+	def __truediv__(self, other):
+		self.batch_loss = self.batch_loss/other
+		for sl_name in self.get_sublosses_names():
+			self.batch_sublosses[sl_name] = self.batch_sublosses[sl_name]/other
+		return self
 
 ###################################################################################################################################################
 
@@ -85,25 +123,19 @@ class CrossEntropy(FTLoss):
 	def __init__(self, name,
 			model_output_is_with_softmax:bool=False,
 			target_is_onehot:bool=True,
-			pred_dict_key:str=None,
-			target_dict_key:str=None,
 			):
 		self.name = name
 		self.model_output_is_with_softmax = model_output_is_with_softmax
 		self.target_is_onehot = target_is_onehot
-		self.pred_dict_key = pred_dict_key
-		self.target_dict_key = target_dict_key
 
-	def __call__(name, y_pred, y_target,
+	def __call__(self, tensor_dict,
 		**kwargs):
-		assert isinstance(tensor_dict, )
-		y_pred = (y_pred[pred_dict_key] if not pred_dict_key is None else y_pred)
-		y_target = (y_target[target_dict_key] if not target_dict_key is None else y_target)
+		assert isinstance(tensor_dict, TensorDict)
+		y_pred = tensor_dict['output']['y']
+		y_target = tensor_dict['target']['y']
 		
-		batch_loss = batch_crossentropy(y_pred, y_target, model_output_is_with_softmax, target_is_onehot) # (b,c) > (b)
-		batch_loss = batch_loss.mean(-1) # (b) > ()
-		sublosses = {
-			'loss/2':batch_loss/2,
-			'loss/3':batch_loss/3,
-		}
-		return batch_loss, sublosses
+		batch_loss = batch_crossentropy(y_pred, y_target, self.model_output_is_with_softmax, self.target_is_onehot) # (b,c) > (b)
+		loss_res = LossResult(batch_loss)
+		loss_res.add_subloss('loss/2', batch_loss/2)
+		loss_res.add_subloss('loss/3', batch_loss/3)
+		return loss_res

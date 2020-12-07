@@ -1,58 +1,16 @@
 from __future__ import print_function
 from __future__ import division
+from . import C_
 
-import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .dummies import DummyModule # used in casualCNN1D
-from . import non_linear as non_linear
+#from .dummies import DummyModule
+from . import non_linear
+from . import utils
 from torch.nn.init import xavier_uniform_, constant_, eye_
-#from dataclasses import dataclass
 
 ###################################################################################################################################################
-class DropoutInfo():
-	def __init__(self, p:float,
-		**kwargs):
-		super().__init__()
-		self.p = p # works as global dropout 
-		for name, val in kwargs.items():
-			setattr(self, name, val)
-
-class TinyModels(nn.Module):
-	'''
-	Class used mostly for decorators
-	'''
-	def _silence(fun):
-		def new_forward(self, *args, **kwargs):
-			with HiddenPrints():
-				ret = fun(self, *args, **kwargs) # speacially useful for self.forward
-			return ret
-		return new_forward
-
-###################################################################################################################################################
-
-def count_parameters(model):
-	return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-def get_cnn_output_dims(w:int, kernel_size:int, padding:int, stride:int,
-	cnn_stacks:int=1,
-	pool_kernel_size:int=1,
-	dilatation:int=1,
-	):
-	out = w
-	for k in range(cnn_stacks): 
-		out = ((out+2*padding-dilatation*(kernel_size-1)-1) / stride) + 1
-	return  int(out/pool_kernel_size)
-
-def get_padding(padding_mode:str, kernel_size:int):
-	if padding_mode=='same':
-		return int(kernel_size/2)
-	else:
-		raise Exception(f'not supported padding_mode:{padding_mode}')
-
-###################################################################################################################################################
-### SOME MODELS
 
 class CausalConv1DLinear(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, kernel_size:int,
@@ -331,9 +289,12 @@ class Linear(nn.Module):
 		txt += f', split_out={self.split_out}' if self.split_out>1 else ''
 		return txt
 
+	def __len__(self):
+		return utils.count_parameters(self)
+
 	def __repr__(self):
 		txt = f'Linear({self.extra_repr()})'
-		txt += f'({count_parameters(self):,}[p])'
+		txt += f'({len(self):,}[p])'
 		return txt
 
 class MLP(nn.Module):
@@ -391,12 +352,15 @@ class MLP(nn.Module):
 			x = fc(x)
 		return x
 
+	def __len__(self):
+		return utils.count_parameters(self)
+
 	def __repr__(self):
 		resume = ''
 		for k,fc in enumerate(self.fcs):
-			resume += f'\t({k}): {fc.__repr__()}\n'
+			resume += f'({k}) - {str(fc)}\n'
 
-		txt = f'MLP(\n{resume})({count_parameters(self):,}[p])'
+		txt = f'MLP(\n{resume})({len(self):,}[p])'
 		return txt
 
 class PMLP(nn.Module):
@@ -464,7 +428,7 @@ class LSTM(nn.Module):
 
 	def __repr__(self):
 		txt = f'LSTM({self.extra_repr()})'
-		txt += f'({count_parameters(self):,}[p])'
+		txt += f'({len(self):,}[p])'
 		return txt
 
 

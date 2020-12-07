@@ -5,13 +5,14 @@ from . import C_
 import torch.nn as nn
 
 class NewOptimizer:
-	def __init__(self, opt_class,
+	def __init__(self, to_optimize_model, opt_class,
 		opt_kwargs:dict={},
 		decay_epochs_delta:int=1,
 		decay_kwargs:dict={},
 		clip_grad:float=None,
 		model_get_parameters_f=None,
 		):
+		self.to_optimize_model = to_optimize_model
 		self.opt_class = opt_class
 		self.opt_kwargs = opt_kwargs
 		self.decay_epochs_delta = decay_epochs_delta
@@ -19,17 +20,26 @@ class NewOptimizer:
 		self.clip_grad = clip_grad
 		self.model_get_parameters_f = model_get_parameters_f
 		self.epoch_counter = 0
+		self.generate_mounted_optimizer()
 
-	def generate_mounted_optimizer(self, model):
-		assert isinstance(model, nn.Module)
-		self.model = model
+	def generate_mounted_optimizer(self):
+		assert isinstance(self.to_optimize_model, nn.Module)
 		self.optimizer = self.opt_class(self.get_model_parameters(), **self.opt_kwargs)
 
 	def get_model_parameters(self):
-		return self.model.parameters() if self.model_get_parameters_f is None else getattr(self.model, self.model_get_parameters_f)()
+		return self.to_optimize_model.parameters() if self.model_get_parameters_f is None else getattr(self.to_optimize_model, self.model_get_parameters_f)()
 
-	def get_count_parameters(self):
+	def __len__(self):
 		return sum(p.numel() for p in self.get_model_parameters() if p.requires_grad)
+
+	def train(self):
+		self.to_optimize_model.train()
+
+	def eval(self):
+		self.to_optimize_model.eval()
+		
+	def device(self):
+		return next(self.get_model_parameters()).device
 
 	def zero_grad(self):
 		self.optimizer.zero_grad()

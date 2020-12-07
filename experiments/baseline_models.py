@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from fuzzytorch.models.basics import MLP, Conv2DLinear
+from fuzzytorch.datasets import TensorDict
 import numpy as np
 
 class MLPClassifier(nn.Module):
@@ -26,19 +27,21 @@ class MLPClassifier(nn.Module):
 		self.get_name()
 	
 	def get_name(self):
-		name = 'mdl-mlp'
-		name += f'_dropout-{self.dropout}'
-		name += f'_outD-{self.output_dims}'
+		name = 'mdl=mlp'
+		name += f'°dropout={self.dropout}'
+		name += f'°outD={self.output_dims}'
 		self.name = name
 		return self.name
 	
 	def get_output_dims(self):
 		return self.classifier.get_output_dims()
 	
-	def forward(self, x, **kwargs):
+	def forward(self, tensor_dict, **kwargs):
+		x = tensor_dict['input']['x']
 		x = x.view(x.shape[0],-1) # flatten
 		x = self.classifier(x)
-		return x
+		tensor_dict.add('output', TensorDict({'y':x}))
+		return tensor_dict
 
 class CNN2DClassifier(nn.Module):
 	def __init__(self,
