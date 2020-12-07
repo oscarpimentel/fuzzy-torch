@@ -3,6 +3,12 @@ from __future__ import division
 from . import C_
 
 import torch
+import flamingchoripan.strings as strings
+
+###################################################################################################################################################
+
+def get_model_name(model_name_dict):
+	return strings.get_string_from_dict(model_name_dict)
 
 ###################################################################################################################################################
 
@@ -36,7 +42,6 @@ class TensorDict():
 				shape = '' if len(x.shape)==0 else ', '.join([str(i) for i in x.shape])
 				t = str(x.dtype)[6:]
 				txt += f'({shape})-{t}-{x.device}'
-
 			txt += ', '
 
 		txt = txt[:-2]+'}'

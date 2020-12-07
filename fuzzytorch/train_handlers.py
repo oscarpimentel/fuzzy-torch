@@ -10,7 +10,7 @@ from . import metrics as ft_metrics
 from . import optimizers as ft_optimizers
 from .models.utils import count_parameters
 from . import exceptions as ex
-import flamingchoripan.files
+import flamingchoripan.files as files
 
 ###################################################################################################################################################
 
@@ -77,58 +77,54 @@ class NewTrainHandler(object):
 		self.history_dict['best_epoch'] = 0
 		self.last_saved_filedir = None
 
-	def set_opt_hist(self):
-			self.history_dict['opt_kwargs_evolution_epoch'] = {opt_key:[] for opt_key in self.optimizer.get_opt_kwargs()}
-
+	### losses methods
 	def get_sublosses_names(self):
 		return list(self.history_dict['sublosses_evolution_k']['train'].keys())
+
+	def add_loss_history(self, loss_value):
+		self.history_dict['finalloss_evolution_k']['train'].append(loss_value)
 
 	def add_subloss_history(self, dict_name, set_name, subloss_name, subloss_value):
 		if not subloss_name in self.history_dict[dict_name][set_name].keys():
 			self.history_dict[dict_name][set_name][subloss_name] = []
 		self.history_dict[dict_name][set_name][subloss_name].append(subloss_value)
 
-	def need_to_save(self):
+	def set_opt_hist(self):
+			self.history_dict['opt_kwargs_evolution_epoch'] = {opt_key:[] for opt_key in self.optimizer.get_opt_kwargs()}
+
+	### along training methos
+	def needs_save(self):
 		return not self.save_mode==C_.SM_NO_SAVE
-
-	def get_metrics_repr(self):
-		return f'(target_metric_crit: {self.target_metric_crit})' if self.save_mode in [C_.SM_ONLY_INF_METRIC, C_.SM_ONLY_SUP_METRIC] else ''
-
-	def __repr__(self):
-		txt = ''
-		txt += f'[{self.name}]'+'\n'
-		txt += f' - opt-parameters: {len(self.optimizer):,}[p] - device: {self.optimizer.device()}'+'\n'
-		txt += f' - save-mode: {self.save_mode}{self.get_metrics_repr()}'+'\n'
-		txt += f' - early_stop_epochcheck_epochs: {self.early_stop_epochcheck_epochs} - early_stop_patience_epochchecks: {self.early_stop_patience_epochchecks}'+'\n'
-		return txt[:-1]
-
-	def set_last_saved_filedir(self, last_saved_filedir):
-		self.last_saved_filedir = last_saved_filedir
-
-	def set_metrics_hist(self):
-		self.metric_crits_names = [m.name for m in self.metrics]
-		self.history_dict['metrics_evolution_epochcheck'] = {
-			'train':{mn:[] for mn in self.metric_crits_names},
-			'val':{mn:[] for mn in self.metric_crits_names},
-		}
-		self.target_metric_crit = self.metric_crits_names[0] if self.target_metric_crit is None and len(self.metrics)>0 else self.target_metric_crit # by default
-		
-	def early_stop_check(self):
-		if self.epochcheck_counter >= self.early_stop_patience_epochchecks:
-			raise exc.TrainingStopException()
-
-	def remove_filedir(self, filedir):
-		files.delete_filedir(filedir, verbose=0) # remove last best model
-
-	def reset_early_stop(self):
-		#print('reset')
-		self.epochcheck_counter = 0
 
 	def train(self):
 		self.optimizer.train()
 
 	def eval(self):
 		self.optimizer.eval()
+
+	### metrics method
+	def set_last_saved_filedir(self, last_saved_filedir):
+		self.last_saved_filedir = last_saved_filedir
+
+	def set_metrics_hist(self):
+		self.metric_names = [m.name for m in self.metrics]
+		self.history_dict['metrics_evolution_epochcheck'] = {
+			'train':{mn:[] for mn in self.metric_names},
+			'val':{mn:[] for mn in self.metric_names},
+		}
+		self.target_metric_crit = self.metric_names[0] if self.target_metric_crit is None and len(self.metrics)>0 else self.target_metric_crit # by default
+
+	def early_stop_check(self):
+		if self.epochcheck_counter >= self.early_stop_patience_epochchecks:
+			raise ex.TrainingInterruptedError()
+
+
+
+	def reset_early_stop(self):
+		#print('reset')
+		self.epochcheck_counter = 0
+
+
 
 	def can_be_evaluated(self):
 		return self.epoch_counter >= self.early_stop_epochcheck_epochs
@@ -157,6 +153,10 @@ class NewTrainHandler(object):
 
 	def set_best_epoch(self, best_epoch):
 		self.history_dict['best_epoch'] = best_epoch
+
+	### files
+	def remove_filedir(self, filedir):
+		files.delete_filedir(filedir, verbose=0) # remove last best model
 
 	def check_save_condition(self, set_name):
 		if self.save_mode==C_.SM_NO_SAVE:
@@ -210,3 +210,14 @@ class NewTrainHandler(object):
 
 		else:
 			raise Exception(f'save mode {self.save_mode} not supported')
+
+	def get_metrics_repr(self):
+		return f'(target_metric_crit: {self.target_metric_crit})' if self.save_mode in [C_.SM_ONLY_INF_METRIC, C_.SM_ONLY_SUP_METRIC] else ''
+
+	def __repr__(self):
+		txt = ''
+		txt += f'[{self.name}]'+'\n'
+		txt += f' - opt-parameters: {len(self.optimizer):,}[p] - device: {self.optimizer.device()}'+'\n'
+		txt += f' - save-mode: {self.save_mode}{self.get_metrics_repr()}'+'\n'
+		txt += f' - early_stop_epochcheck_epochs: {self.early_stop_epochcheck_epochs} - early_stop_patience_epochchecks: {self.early_stop_patience_epochchecks}'+'\n'
+		return txt[:-1]
