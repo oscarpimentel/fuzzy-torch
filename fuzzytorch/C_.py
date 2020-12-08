@@ -5,7 +5,9 @@ from flamingchoripan import C_ as C_fc
 ###################################################################################################################################################
 
 EPS = 1e-10
-DUMMY_TEXT = "I'm dummy"
+DEFAULT_PADDING_MODE = 'same'
+DEFAULT_ACTIVATION = 'relu'
+DEFAULT_LAST_ACTIVATION = 'linear'
 
 DEFAULT_CNN_KWARGS = {
 	'kernel_size':3,
@@ -17,7 +19,6 @@ DEFAULT_POOL_KWARGS = {
 	'stride':2,
 	'dilation':1,
 }
-DEFAULT_PADDING_MODE = 'same'
 
 SM_NO_SAVE = 'no_save'
 SM_ALL = 'all'
@@ -29,6 +30,8 @@ SM_ONLY_SUP_METRIC = 'only_sup_metric'
 SAVE_FEXT = 'tfes'
 KEY_KEY_SEP_CHAR = C_fc.KEY_KEY_SEP_CHAR
 KEY_VALUE_SEP_CHAR = C_fc.KEY_VALUE_SEP_CHAR
+
+DUMMY_TEXT = 'Dummy'
 
 PLOT_FIGSIZE = (11,3)
 PLOT_GRID_ALPHA = 0.25

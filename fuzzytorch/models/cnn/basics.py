@@ -129,7 +129,7 @@ class ConvLinear(nn.Module):
 
 class MLConv(nn.Module):
 	def __init__(self, input_dims:int, input_space:list, output_dims:int, embd_dims_list:list,
-		activation='linear',
+		activation=C_.DEFAULT_ACTIVATION,
 		in_dropout=0.0,
 		out_dropout=0.0,
 		bias=True,
@@ -140,7 +140,7 @@ class MLConv(nn.Module):
 		padding_mode=C_.DEFAULT_PADDING_MODE,
 
 		dropout=0.,
-		last_activation=None,
+		last_activation=C_.DEFAULT_LAST_ACTIVATION,
 		**kwargs):
 		super().__init__()
 		### CHECKS
@@ -246,7 +246,7 @@ class Conv1DLinear(ConvLinear):
 
 class MLConv1D(MLConv):
 	def __init__(self, input_dims:int, input_space:list, output_dims:int, embd_dims_list:list,
-		activation='linear',
+		activation=C_.DEFAULT_ACTIVATION,
 		in_dropout=0.0,
 		out_dropout=0.0,
 		bias=True,
@@ -257,7 +257,7 @@ class MLConv1D(MLConv):
 		padding_mode=C_.DEFAULT_PADDING_MODE,
 
 		dropout=0.,
-		last_activation=None,
+		last_activation=C_.DEFAULT_LAST_ACTIVATION,
 		**kwargs):
 		self.cnn_class = Conv1DLinear
 		super().__init__(input_dims, input_space, output_dims, embd_dims_list,
@@ -325,7 +325,7 @@ class Conv2DLinear(ConvLinear):
 
 class MLConv2D(MLConv):
 	def __init__(self, input_dims:int, input_space:list, output_dims:int, embd_dims_list:list,
-		activation='linear',
+		activation=C_.DEFAULT_ACTIVATION,
 		in_dropout=0.0,
 		out_dropout=0.0,
 		bias=True,
@@ -336,7 +336,7 @@ class MLConv2D(MLConv):
 		padding_mode=C_.DEFAULT_PADDING_MODE,
 
 		dropout=0.,
-		last_activation=None,
+		last_activation=C_.DEFAULT_LAST_ACTIVATION,
 		**kwargs):
 		self.cnn_class = Conv2DLinear
 		super().__init__(input_dims, input_space, output_dims, embd_dims_list,

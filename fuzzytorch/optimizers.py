@@ -4,7 +4,9 @@ from . import C_
 
 import torch.nn as nn
 
-class NewOptimizer:
+###################################################################################################################################################
+
+class LossOptimizer:
 	def __init__(self, to_optimize_model, opt_class,
 		opt_kwargs:dict={},
 		decay_epochs_delta:int=1,

@@ -13,6 +13,7 @@ def count_parameters(module):
 def count_memory_mb(module,
 	bits=32,
 	):
+	assert 0, 'not implemented'
 	assert bits*count_parameters(module)
 
 ###################################################################################################################################################

@@ -90,13 +90,13 @@ class Linear(nn.Module):
 
 class MLP(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list,
-		activation='relu',
+		activation=C_.DEFAULT_ACTIVATION,
 		in_dropout=0.0,
 		out_dropout=0.0,
 		bias=True,
 
 		dropout=0.0,
-		last_activation=None,
+		last_activation=C_.DEFAULT_LAST_ACTIVATION,
 		**kwargs):
 		super().__init__()
 		### CHECKS

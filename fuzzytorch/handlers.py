@@ -14,14 +14,14 @@ from flamingchoripan import files
 from flamingchoripan import strings
 from flamingchoripan import prints
 import warnings
-from . import train_handlers as ths
+from . import monitors as mon
 from . import exceptions as ex
 from .utils import get_model_name
 
 ###################################################################################################################################################
 
 class ModelTrainHandler(object):
-	def __init__(self, model, train_handlers:list,
+	def __init__(self, model, lmonitors:list,
 		save_rootdir='../save/',
 		id=0,
 		epochs_max=1e4,
@@ -29,12 +29,12 @@ class ModelTrainHandler(object):
 		delete_all_previous_epochs_files:bool=True,
 		extra_model_name_dict={},
 		):
-		if isinstance(train_handlers, ths.NewTrainHandler):
-			train_handlers = [train_handlers]
-		assert isinstance(train_handlers, list) and all([isinstance(train_handler, ths.NewTrainHandler) for train_handler in train_handlers])
+		if isinstance(lmonitors, mon.LossMonitor):
+			lmonitors = [lmonitors]
+		assert isinstance(lmonitors, list) and all([isinstance(lmonitor, mon.LossMonitor) for lmonitor in lmonitors])
 
 		self.model = model
-		self.train_handlers = train_handlers
+		self.lmonitors = lmonitors
 		self.save_rootdir = save_rootdir
 		self.complete_save_roodir = f'{self.save_rootdir}/{self.model.get_name()}'+('' if len(extra_model_name_dict.keys())==0 else f'{C_.KEY_KEY_SEP_CHAR}{get_model_name(extra_model_name_dict)}')
 		self.id = id
@@ -67,27 +67,27 @@ class ModelTrainHandler(object):
 		txt += strings.color_str(f'model_name: {self.model.get_name()} - id: {self.id}', 'blue') + '\n'
 		txt += strings.color_str(f'device: {self.device} - device_name: {self.device_name}', 'green') + '\n'
 		txt += f'save_rootdir: {self.complete_save_roodir}' + '\n'
-		for trainh in self.train_handlers:
-			txt += str(trainh) + '\n'
+		for lmonitor in self.lmonitors:
+			txt += str(lmonitor) + '\n'
 		return txt[:-1]
 
 	def training_save_model(self, epoch, set_name):
 		saved_filedir = None
 		# check is can be saved
-		can_save_model = any([trainh.check_save_condition(set_name) for trainh in self.train_handlers])
+		can_save_model = any([lmonitor.check_save_condition(set_name) for lmonitor in self.lmonitors])
 		if can_save_model:
 			files.create_dir(self.complete_save_roodir, verbose=0)
 			saved_filedir = f'{self.complete_save_roodir}/id{C_.KEY_VALUE_SEP_CHAR}{self.id}{C_.KEY_KEY_SEP_CHAR}epoch{C_.KEY_VALUE_SEP_CHAR}{epoch}.{C_.SAVE_FEXT}'
 
 			dic_to_save = {
 				'state_dict':self.model.state_dict(),
-				'train_handler':{trainh.name:trainh.history_dict for trainh in self.train_handlers},
+				'lmonitors':{lmonitor.name:lmonitor.history_dict for lmonitor in self.lmonitors},
 			}
 			torch.save(dic_to_save, saved_filedir) # SAVE MODEL
-			for trainh in self.train_handlers:
-				trainh.set_last_saved_filedir(saved_filedir)
-				trainh.reset_early_stop() # refresh counters for all
-				trainh.set_best_epoch(epoch)
+			for lmonitor in self.lmonitors:
+				lmonitor.set_last_saved_filedir(saved_filedir)
+				lmonitor.reset_early_stop() # refresh counters for all
+				lmonitor.set_best_epoch(epoch)
 
 		return saved_filedir
 
@@ -97,38 +97,38 @@ class ModelTrainHandler(object):
 		text = None
 		evaluated = False
 		with torch.no_grad():
-			for trainh in self.train_handlers:
-				if trainh.can_be_evaluated():
+			for lmonitor in self.lmonitors:
+				if lmonitor.can_be_evaluated():
 					if text is None:
 						text = f'[{set_name}]'
 
 					evaluated = True
 					set_loss = []
-					set_metrics = {mcn:[] for mcn in trainh.metric_names}
+					set_metrics = {mcn:[] for mcn in lmonitor.metric_names}
 					if self.uses_train_eval_loader_methods:
 						set_loader.eval() # dataset eval mode!
 					self.model.eval() # model eval mode!
 					for k,in_tensor_dict in enumerate(set_loader): # batches loop
 						out_tensor_dict = self.model(in_tensor_dict.to(self.device), **model_kwargs)
-						loss = trainh.loss(out_tensor_dict)
+						loss = lmonitor.loss(out_tensor_dict)
 						set_loss.append(loss)
-						for metric in trainh.metrics:
+						for metric in lmonitor.metrics:
 							set_metrics[metric.name].append(metric(out_tensor_dict))
 
 					set_loss = sum(set_loss)/len(set_loss)
 					
 					## SET LOSS TO HYSTORY
-					trainh.history_dict['finalloss_evolution_epochcheck'][set_name].append(set_loss.get_loss())
-					text += f'[{trainh.name}] *loss*: {loss}'
+					lmonitor.history_dict['finalloss_evolution_epochcheck'][set_name].append(set_loss.get_loss())
+					text += f'[{lmonitor.name}] *loss*: {loss}'
 
 					## SET SUBLOSSES TO HYSTORY
 					for subloss_name in set_loss.get_sublosses_names():
-						trainh.add_subloss_history('sublosses_evolution_epochcheck', set_name, subloss_name, set_loss.get_subloss(subloss_name))
+						lmonitor.add_subloss_history('sublosses_evolution_epochcheck', set_name, subloss_name, set_loss.get_subloss(subloss_name))
 
 					## SET METRICS TO HYSTORY
 					for metric_name in set_metrics.keys():
 						metric_res = sum(set_metrics[metric_name])/len(set_metrics[metric_name])
-						trainh.history_dict['metrics_evolution_epochcheck'][set_name][metric_name].append(metric_res.get_metric())
+						lmonitor.history_dict['metrics_evolution_epochcheck'][set_name][metric_name].append(metric_res.get_metric())
 						text += f' - {metric_name}: {metric_res}'
 
 					text += f' (time: {eval_cr.dt_mins():.4f}[mins])'
@@ -141,7 +141,7 @@ class ModelTrainHandler(object):
 		bar(text_dic, update)
 
 	def create_dir(self):
-		if any([int(trainh.needs_save()) for trainh in self.train_handlers]):
+		if any([int(lmonitor.needs_save()) for lmonitor in self.lmonitors]):
 			files.create_dir(self.complete_save_roodir, verbose=1)
 
 	def delete_filedirs(self):
@@ -178,7 +178,7 @@ class ModelTrainHandler(object):
 			try:
 				if can_be_in_loop:
 					#with torch.autograd.detect_anomaly(): # really useful but slow af
-					train_cr = {trainh.name:times.Cronometer() for trainh in self.train_handlers}
+					train_cr = {lmonitor.name:times.Cronometer() for lmonitor in self.lmonitors}
 					if self.uses_train_eval_loader_methods:
 						train_loader.train() # dataset train mode!
 
@@ -186,40 +186,40 @@ class ModelTrainHandler(object):
 						assert isinstance(in_tensor_dict, TensorDict)
 						backprop_text = f'id: {self.id} - epoch: {epoch:,}/{self.epochs_max:,}({k:,}/{ks_epochs:,})'
 						losses_text_list = []
-						for kt,trainh in enumerate(self.train_handlers): # along train handlers
-							trainh.history_dict['ks_epochs'] = ks_epochs
-							trainh.history_dict['k_every'] = k_every
-							for trainh_aux in self.train_handlers: # freeze all other models except actual
-								trainh_aux.eval() 
+						for kt,lmonitor in enumerate(self.lmonitors): # along train lmonitors
+							lmonitor.history_dict['ks_epochs'] = ks_epochs
+							lmonitor.history_dict['k_every'] = k_every
+							for lmonitor_aux in self.lmonitors: # freeze all other models except actual
+								lmonitor_aux.eval() 
 
-							trainh.train() # model train mode!
-							trainh.optimizer.zero_grad() # set gradient to 0
+							lmonitor.train() # model train mode!
+							lmonitor.optimizer.zero_grad() # set gradient to 0
 							out_tensor_dict = self.model(in_tensor_dict.to(self.device), **model_kwargs) # Feed forward
-							loss = trainh.loss(out_tensor_dict)
+							loss = lmonitor.loss(out_tensor_dict)
 							loss.get_loss(numpy=False).backward() # gradient calculation
-							trainh.optimizer.step() # step gradient
+							lmonitor.optimizer.step() # step gradient
 
 							### text loss
-							losses_text_list.append(f'[{trainh.name}] *loss*: {loss}')
+							losses_text_list.append(f'[{lmonitor.name}] *loss*: {loss}')
 							
 							### SET LOSS TO HYSTORY ONLY EVERY k_every ITERATIONS
 							if k%k_every==0:
-								trainh.add_loss_history(loss.get_loss())
+								lmonitor.add_loss_history(loss.get_loss())
 								for subloss_name in loss.get_sublosses_names():
-									trainh.add_subloss_history('sublosses_evolution_k', 'train', subloss_name, loss.get_subloss(subloss_name))
+									lmonitor.add_subloss_history('sublosses_evolution_k', 'train', subloss_name, loss.get_subloss(subloss_name))
 						### TEXT
 						bar_text_dic['train'] = backprop_text + ''.join(losses_text_list)
 						self.update_bar(training_bar, bar_text_dic, True)
 
 					### END OF EPOCH
-					for trainh in self.train_handlers:
-						trainh.history_dict['mins_evolution_epoch']['train'].append(train_cr[trainh.name].dt_mins())
-						trainh.history_dict['global_mins_evolution_epoch']['train'].append(global_train_cr.dt_mins())
-						trainh.epoch_update()
+					for lmonitor in self.lmonitors:
+						lmonitor.history_dict['mins_evolution_epoch']['train'].append(train_cr[lmonitor.name].dt_mins())
+						lmonitor.history_dict['global_mins_evolution_epoch']['train'].append(global_train_cr.dt_mins())
+						lmonitor.epoch_update()
 						### SET OPTIMIZER KWARGS TO HYSTORY
-						for opt_key in trainh.optimizer.get_opt_kwargs():
-							opt_kwarg_value = trainh.optimizer.get_kwarg_value(opt_key)
-							trainh.history_dict['opt_kwargs_evolution_epoch'][opt_key].append(opt_kwarg_value)
+						for opt_key in lmonitor.optimizer.get_opt_kwargs():
+							opt_kwarg_value = lmonitor.optimizer.get_kwarg_value(opt_key)
+							lmonitor.history_dict['opt_kwargs_evolution_epoch'][opt_key].append(opt_kwarg_value)
 
 					### EVALUATION IN SETS
 					text, evaluated = self.evaluate_in_set('train', train_loader, model_kwargs)
@@ -231,13 +231,13 @@ class ModelTrainHandler(object):
 					if evaluated:
 						bar_text_dic['eval-val'] = text
 						self.update_bar(training_bar, bar_text_dic)
-						[trainh.evaluated() for trainh in self.train_handlers]
+						[lmonitor.evaluated() for lmonitor in self.lmonitors]
 
 					### EARLY STOPPING
 					text = f'[stop]'
-					for trainh in self.train_handlers:
-						trainh.early_stop_check() # raise exception
-						text += f'[{trainh.name}] epoch-counter: ({trainh.epoch_counter}/{trainh.early_stop_epochcheck_epochs}) - patience: ({trainh.epochcheck_counter}/{trainh.early_stop_patience_epochchecks})'
+					for lmonitor in self.lmonitors:
+						lmonitor.early_stop_check() # raise exception
+						text += f'[{lmonitor.name}] epoch-counter: ({lmonitor.epoch_counter}/{lmonitor.early_stop_epochcheck_epochs}) - patience: ({lmonitor.epochcheck_counter}/{lmonitor.early_stop_patience_epochchecks})'
 					
 					bar_text_dic['early-stop'] = text
 					self.update_bar(training_bar, bar_text_dic)
@@ -263,9 +263,9 @@ class ModelTrainHandler(object):
 		training_bar.done()
 		print(strings.get_bar())
 		print('End of training!')
-		for trainh in self.train_handlers:
-			text = f'[{trainh.name}] best-epoch: {trainh.get_best_epoch()} - convergence-time: {trainh.get_mins_to_convergence():.4f}[mins]'
-			text += f' - time-per-epoch: {trainh.get_mins_per_epoch():.4f}[mins]'
+		for lmonitor in self.lmonitors:
+			text = f'[{lmonitor.name}] best-epoch: {lmonitor.get_best_epoch()} - convergence-time: {lmonitor.get_mins_to_convergence():.4f}[mins]'
+			text += f' - time-per-epoch: {lmonitor.get_mins_per_epoch():.4f}[mins]'
 			print(text)
 		print(strings.get_bar(char=C_fc.TOP_SQUARE_CHAR))
 		no_error_train = not end_with_nan
@@ -316,9 +316,9 @@ class ModelTrainHandler(object):
 		else:
 			loaded_dic = torch.load(to_load_filedir, map_location='cpu')
 
-		for trainh in self.train_handlers:
-			trainh.history_dict = loaded_dic['train_handler'][trainh.name]
-			trainh.model.load_state_dict(loaded_dic['state_dict'][trainh.name])
+		for lmonitor in self.lmonitors:
+			lmonitor.history_dict = loaded_dic['lmonitors'][lmonitor.name]
+			lmonitor.model.load_state_dict(loaded_dic['state_dict'][lmonitor.name])
 			
 		return True
 

@@ -63,6 +63,7 @@ class CNN2DClassifier(nn.Module):
 		### build cnn embedding
 		cnn_kwargs = {
 			'activation':'relu',
+			'last_activation':'relu',
 			#'in_dropout':self.dropout,
 			'cnn_kwargs':{'kernel_size':5, 'stride':1, 'dilation':1,},
 			#'padding_mode':'same',
