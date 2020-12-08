@@ -7,6 +7,18 @@ from flamingchoripan import C_ as C_fc
 EPS = 1e-10
 DUMMY_TEXT = "I'm dummy"
 
+DEFAULT_CNN_KWARGS = {
+	'kernel_size':3,
+	'stride':1,
+	'dilation':1,
+}
+DEFAULT_POOL_KWARGS = {
+	'kernel_size':2,
+	'stride':2,
+	'dilation':1,
+}
+DEFAULT_PADDING_MODE = 'same'
+
 SM_NO_SAVE = 'no_save'
 SM_ALL = 'all'
 SM_ONLY_ALL = 'only_all'
@@ -21,4 +33,4 @@ KEY_VALUE_SEP_CHAR = C_fc.KEY_VALUE_SEP_CHAR
 PLOT_FIGSIZE = (11,3)
 PLOT_GRID_ALPHA = 0.25
 PLOT_DPI = 80
-C_MAIN_LOSS = '#343434'
+#C_MAIN_LOSS = '#343434'

@@ -64,9 +64,8 @@ class CNN2DClassifier(nn.Module):
 		cnn_kwargs = {
 			'activation':'relu',
 			#'in_dropout':self.dropout,
-			'pool_kernel_size':2,
-			'padding_mode':'same',
-			'kernel_size':5,
+			'cnn_kwargs':{'kernel_size':5, 'stride':1, 'dilation':1,},
+			#'padding_mode':'same',
 		}
 		self.ml_cnn2d = MLConv2D(3, [32,32], cnn_features[-1], cnn_features[:-1], **cnn_kwargs)
 		self.last_cnn_output_dims = self.ml_cnn2d.get_output_dims()

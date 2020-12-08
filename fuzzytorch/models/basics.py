@@ -153,7 +153,7 @@ class MLP(nn.Module):
 	def __repr__(self):
 		resume = ''
 		for k,fc in enumerate(self.fcs):
-			resume += f'({k}) - {str(fc)}\n'
+			resume += f'  ({k}) - {str(fc)}\n'
 
 		txt = f'MLP(\n{resume})({len(self):,}[p])'
 		return txt
