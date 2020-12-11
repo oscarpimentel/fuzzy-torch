@@ -3,6 +3,7 @@ from __future__ import division
 from . import C_
 
 import torch.nn as nn
+import pandas as pd
 
 ###################################################################################################################################################
 
@@ -70,3 +71,9 @@ class LossOptimizer:
 
 	def get_kwarg_value(self, key):
 		return self.optimizer.param_groups[0][key]
+
+	def get_info_df(self):
+		opt_kwargs = self.get_opt_kwargs()
+		values = [self.get_kwarg_value(opt_kwarg) for opt_kwarg in opt_kwargs]
+		df = pd.DataFrame([values], columns=opt_kwargs)
+		return df

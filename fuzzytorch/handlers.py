@@ -81,7 +81,7 @@ class ModelTrainHandler(object):
 
 			dic_to_save = {
 				'state_dict':self.model.state_dict(),
-				'lmonitors':{lmonitor.name:lmonitor.history_dict for lmonitor in self.lmonitors},
+				'lmonitors':{lmonitor.name:lmonitor.get_save_dict() for lmonitor in self.lmonitors},
 			}
 			torch.save(dic_to_save, saved_filedir) # SAVE MODEL
 			for lmonitor in self.lmonitors:
@@ -93,45 +93,40 @@ class ModelTrainHandler(object):
 
 	def evaluate_in_set(self, set_name:str, set_loader, model_kwargs:dict,
 		):
-		eval_cr = times.Cronometer()
 		text = None
 		evaluated = False
 		with torch.no_grad():
 			for lmonitor in self.lmonitors:
-				if lmonitor.can_be_evaluated():
+				lmonitor_cr = times.Cronometer()
+				if lmonitor.needs_evaluation():
 					if text is None:
 						text = f'[{set_name}]'
 
 					evaluated = True
 					set_loss = []
-					set_metrics = {mcn:[] for mcn in lmonitor.metric_names}
+					set_metrics_dict = {mn:[] for mn in lmonitor.get_metric_names()}
 					if self.uses_train_eval_loader_methods:
 						set_loader.eval() # dataset eval mode!
 					self.model.eval() # model eval mode!
 					for k,in_tensor_dict in enumerate(set_loader): # batches loop
 						out_tensor_dict = self.model(in_tensor_dict.to(self.device), **model_kwargs)
-						loss = lmonitor.loss(out_tensor_dict)
-						set_loss.append(loss)
+						set_loss.append(lmonitor.loss(out_tensor_dict))
 						for metric in lmonitor.metrics:
-							set_metrics[metric.name].append(metric(out_tensor_dict))
+							set_metrics_dict[metric.name].append(metric(out_tensor_dict))
 
+					### save loss to history & bar text
 					set_loss = sum(set_loss)/len(set_loss)
-					
 					## SET LOSS TO HYSTORY
-					lmonitor.history_dict['finalloss_evolution_epochcheck'][set_name].append(set_loss.get_loss())
-					text += f'[{lmonitor.name}] *loss*: {loss}'
+					lmonitor.add_loss_history_epoch(set_loss, lmonitor_cr.dt(), set_name)
+					text += f'[{lmonitor.name}] __loss__: {str(set_loss)}'
 
-					## SET SUBLOSSES TO HYSTORY
-					for subloss_name in set_loss.get_sublosses_names():
-						lmonitor.add_subloss_history('sublosses_evolution_epochcheck', set_name, subloss_name, set_loss.get_subloss(subloss_name))
+					### save metrics to history & bar text
+					set_metrics_dict = {mn:sum(set_metrics_dict[mn])/len(set_metrics_dict[mn]) for mn in lmonitor.get_metric_names()}
+					for mn in lmonitor.get_metric_names():
+						text += f' - {mn}: {str(set_metrics_dict[mn])}'
+					lmonitor.add_metric_history_epoch(set_metrics_dict, lmonitor_cr.dt(), set_name)
 
-					## SET METRICS TO HYSTORY
-					for metric_name in set_metrics.keys():
-						metric_res = sum(set_metrics[metric_name])/len(set_metrics[metric_name])
-						lmonitor.history_dict['metrics_evolution_epochcheck'][set_name][metric_name].append(metric_res.get_metric())
-						text += f' - {metric_name}: {metric_res}'
-
-					text += f' (time: {eval_cr.dt_mins():.4f}[mins])'
+					text += f' {lmonitor_cr}'
 
 		return text, evaluated
 
@@ -178,17 +173,15 @@ class ModelTrainHandler(object):
 			try:
 				if can_be_in_loop:
 					#with torch.autograd.detect_anomaly(): # really useful but slow af
-					train_cr = {lmonitor.name:times.Cronometer() for lmonitor in self.lmonitors}
 					if self.uses_train_eval_loader_methods:
 						train_loader.train() # dataset train mode!
 
-					for k,in_tensor_dict in enumerate(train_loader): # batches loop
+					for ki,in_tensor_dict in enumerate(train_loader): # batches loop - k
 						assert isinstance(in_tensor_dict, TensorDict)
-						backprop_text = f'id: {self.id} - epoch: {epoch:,}/{self.epochs_max:,}({k:,}/{ks_epochs:,})'
+						backprop_text = f'id: {self.id} - epoch: {epoch:,}/{self.epochs_max:,}({ki:,}/{ks_epochs:,})'
 						losses_text_list = []
 						for kt,lmonitor in enumerate(self.lmonitors): # along train lmonitors
-							lmonitor.history_dict['ks_epochs'] = ks_epochs
-							lmonitor.history_dict['k_every'] = k_every
+							lmonitor_cr = times.Cronometer()
 							for lmonitor_aux in self.lmonitors: # freeze all other models except actual
 								lmonitor_aux.eval() 
 
@@ -199,29 +192,23 @@ class ModelTrainHandler(object):
 							loss.get_loss(numpy=False).backward() # gradient calculation
 							lmonitor.optimizer.step() # step gradient
 
-							### text loss
-							losses_text_list.append(f'[{lmonitor.name}] *loss*: {loss}')
-							
-							### SET LOSS TO HYSTORY ONLY EVERY k_every ITERATIONS
-							if k%k_every==0:
-								lmonitor.add_loss_history(loss.get_loss())
-								for subloss_name in loss.get_sublosses_names():
-									lmonitor.add_subloss_history('sublosses_evolution_k', 'train', subloss_name, loss.get_subloss(subloss_name))
+							### save loss to history & bar text
+							lmonitor.add_loss_history_k(loss, lmonitor_cr.dt())
+							losses_text_list.append(f'[{lmonitor.name}] __loss__: {str(loss)} {lmonitor_cr}')
+							lmonitor.k_update() # update k
+
+						if ki>6:
+							break
+						
 						### TEXT
 						bar_text_dic['train'] = backprop_text + ''.join(losses_text_list)
-						self.update_bar(training_bar, bar_text_dic, True)
-
-					### END OF EPOCH
+						self.update_bar(training_bar, bar_text_dic)
+					
+					### save opt to history
 					for lmonitor in self.lmonitors:
-						lmonitor.history_dict['mins_evolution_epoch']['train'].append(train_cr[lmonitor.name].dt_mins())
-						lmonitor.history_dict['global_mins_evolution_epoch']['train'].append(global_train_cr.dt_mins())
-						lmonitor.epoch_update()
-						### SET OPTIMIZER KWARGS TO HYSTORY
-						for opt_key in lmonitor.optimizer.get_opt_kwargs():
-							opt_kwarg_value = lmonitor.optimizer.get_kwarg_value(opt_key)
-							lmonitor.history_dict['opt_kwargs_evolution_epoch'][opt_key].append(opt_kwarg_value)
+						lmonitor.add_opt_history_epoch()
 
-					### EVALUATION IN SETS
+					### evaluation in sets
 					text, evaluated = self.evaluate_in_set('train', train_loader, model_kwargs)
 					if evaluated:
 						bar_text_dic['eval-train'] = text
@@ -231,21 +218,20 @@ class ModelTrainHandler(object):
 					if evaluated:
 						bar_text_dic['eval-val'] = text
 						self.update_bar(training_bar, bar_text_dic)
-						[lmonitor.evaluated() for lmonitor in self.lmonitors]
 
-					### EARLY STOPPING
-					text = f'[stop]'
-					for lmonitor in self.lmonitors:
-						lmonitor.early_stop_check() # raise exception
-						text += f'[{lmonitor.name}] epoch-counter: ({lmonitor.epoch_counter}/{lmonitor.early_stop_epochcheck_epochs}) - patience: ({lmonitor.epochcheck_counter}/{lmonitor.early_stop_patience_epochchecks})'
-					
-					bar_text_dic['early-stop'] = text
-					self.update_bar(training_bar, bar_text_dic)
-
-					### SAVING MODEL
+					### saving model
 					if evaluated:
 						saved_filedir = self.training_save_model(epoch, 'val')
 						self.update_bar(training_bar, bar_text_dic)
+
+					### end of epoch!!
+					text = f'[stop]'
+					for lmonitor in self.lmonitors:
+						lmonitor.epoch_update() # update epoch
+						text += f'[{lmonitor.name}] counter_epoch: {lmonitor.counter_epoch})'
+
+					bar_text_dic['early-stop'] = text
+					self.update_bar(training_bar, bar_text_dic, True)
 
 			except ex.NanLossError as e:
 				can_be_in_loop = False
@@ -264,8 +250,10 @@ class ModelTrainHandler(object):
 		print(strings.get_bar())
 		print('End of training!')
 		for lmonitor in self.lmonitors:
-			text = f'[{lmonitor.name}] best-epoch: {lmonitor.get_best_epoch()} - convergence-time: {lmonitor.get_mins_to_convergence():.4f}[mins]'
-			text += f' - time-per-epoch: {lmonitor.get_mins_per_epoch():.4f}[mins]'
+			text = f'[{lmonitor.name}] best_epoch: {lmonitor.get_best_epoch()}'
+			text = f' - time_per_iteration: {lmonitor.get_time_per_iteration()}[segs]'
+			text += f' - time_per_epoch: {lmonitor.get_time_per_epoch()/60.}[mins]'
+			text += f' - total_time: {lmonitor.get_total_time()/60.}[mins]'
 			print(text)
 		print(strings.get_bar(char=C_fc.TOP_SQUARE_CHAR))
 		no_error_train = not end_with_nan

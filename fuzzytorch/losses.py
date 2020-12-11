@@ -8,6 +8,7 @@ from .datasets import TensorDict
 from flamingchoripan.strings import xstr
 from . import exceptions as ex
 import numpy as np
+import pandas as pd
 
 ###################################################################################################################################################
 
@@ -55,15 +56,16 @@ class LossResult():
 	def __init__(self, batch_loss,
 		reduction_mode='mean',
 		):
-		assert len(batch_loss.shape)<=1
+		assert len(batch_loss.shape)==1
+		self.original_len = len(batch_loss)
 		self.reduction_mode = reduction_mode
 		self.batch_sublosses = {}
 		if self.reduction_mode=='mean':
-			self.batch_loss = batch_loss.mean()
+			self.batch_loss = batch_loss.mean()[None]
 
 	def add_subloss(self, name, batch_subloss):
-		assert len(batch_subloss.shape)<=1
-		self.batch_sublosses[name] = batch_subloss.mean()
+		assert len(batch_subloss.shape)==1
+		self.batch_sublosses[name] = batch_subloss.mean()[None]
 
 	def get_loss(self,
 		numpy=True,
@@ -82,14 +84,14 @@ class LossResult():
 		return list(self.batch_sublosses.keys())
 
 	def __len__(self):
-		return len(self.batch_sublosses.keys())
+		return self.original_len
 
 	def __repr__(self):
 		lv = f'{xstr(self.get_loss())}'
-		batch_sublosses = self.batch_sublosses.keys()
+		batch_sublosses = list(self.batch_sublosses.keys())
 		slv = '+'.join([xstr(self.get_subloss(batch_subloss)) for batch_subloss in batch_sublosses])
 		slvn = '+'.join([batch_subloss for batch_subloss in batch_sublosses])
-		return f'{lv}={slv}({slvn})' if len(self)>0 else f'{lv}'
+		return f'{lv}={slv}({slvn})' if len(batch_sublosses)>0 else f'{lv}'
 
 	def __add__(self, other):
 		if other==0:
@@ -110,6 +112,12 @@ class LossResult():
 		for sl_name in self.get_sublosses_names():
 			self.batch_sublosses[sl_name] = self.batch_sublosses[sl_name]/other
 		return self
+
+	def get_info_df(self):
+		sublosses_names = self.get_sublosses_names()
+		values = [len(self), self.get_loss()]+[self.get_subloss(name) for name in sublosses_names]
+		df = pd.DataFrame([values], columns=['__len__', '__loss__']+sublosses_names)
+		return df
 
 ###################################################################################################################################################
 

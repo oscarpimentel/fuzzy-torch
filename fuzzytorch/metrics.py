@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 from .datasets import TensorDict
 from flamingchoripan.strings import xstr
+import pandas as pd
 
 ###################################################################################################################################################
 
@@ -13,15 +14,19 @@ class MetricResult():
 	def __init__(self, batch_metric,
 		reduction_mode='mean',
 		):
-		assert len(batch_metric.shape)<=1
+		assert len(batch_metric.shape)==1
+		self.original_len = len(batch_metric)
 		self.reduction_mode = reduction_mode
 		if self.reduction_mode=='mean':
-			self.batch_metric = batch_metric.mean()
+			self.batch_metric = batch_metric.mean()[None]
 
 	def get_metric(self,
 		numpy=True,
 		):
 		return self.batch_metric.item() if numpy else self.batch_metric
+
+	def __len__(self):
+		return self.original_len
 
 	def __repr__(self):
 		return f'{xstr(self.get_metric())}'
@@ -41,6 +46,10 @@ class MetricResult():
 	def __truediv__(self, other):
 		self.batch_metric = self.batch_metric/other
 		return self
+
+	def get_info_df(self):
+		df = pd.DataFrame([self.get_metric()], columns=['__metric__'])
+		return df
 
 ###################################################################################################################################################
 

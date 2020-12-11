@@ -8,24 +8,32 @@ import numpy as np
 from . import losses as ft_losses
 from . import metrics as ft_metrics
 from . import optimizers as ft_optimizers
-from .models.utils import count_parameters
 from . import exceptions as ex
 import flamingchoripan.files as files
+from flamingchoripan.counters import Counter
+from flamingchoripan.datascience.statistics import XError
+import pandas as pd
+
+###################################################################################################################################################
+
+def get_formated_df(df, index, index_name):
+	df.index = [index]
+	df.index.rename(index_name, inplace=True)
+	return df
 
 ###################################################################################################################################################
 
 class LossMonitor(object):
 	def __init__(self, loss, optimizer, metrics,
-		early_stop_epochcheck_epochs:int=1,
-		early_stop_patience_epochchecks:int=1000,
 		save_mode:str=C_.SM_NO_SAVE,
 		target_metric_crit:str=None,
+		k_counter_duration:int=0,
+		val_epoch_counter_duration:int=0,
+		earlystop_epoch_duration:int=21,
 		**kwargs):
 		assert isinstance(loss, ft_losses.FTLoss)
 		assert isinstance(metrics, list) and all([isinstance(metric, ft_metrics.FTMetric) for metric in metrics])
 		assert isinstance(optimizer, ft_optimizers.LossOptimizer)
-		assert early_stop_epochcheck_epochs>=1
-		assert early_stop_patience_epochchecks>=2
 
 		### ATTRIBUTES
 		self.loss = loss
@@ -33,84 +41,111 @@ class LossMonitor(object):
 		self.metrics = metrics
 		self.name = loss.name
 
-		self.early_stop_epochcheck_epochs = early_stop_epochcheck_epochs
-		self.early_stop_patience_epochchecks = early_stop_patience_epochchecks
 		self.save_mode = save_mode
-		self.target_metric_crit = target_metric_crit
+		self.target_metric_crit = metrics[0].name if target_metric_crit is None else target_metric_crit
+		self.counter_k = Counter({'k': k_counter_duration})
+		self.counter_epoch = Counter({'val_epoch':val_epoch_counter_duration, 'earlystop_epoch':earlystop_epoch_duration})
 
-		self.epoch_counter = 0
-		self.epochcheck_counter = 0
-		self.uses_early_stop = self.early_stop_patience_epochchecks > 0
-		self.history_dict = {
-			'ks_epochs':None,
-			'early_stop_epochcheck_epochs':self.early_stop_epochcheck_epochs,
-			'early_stop_patience_epochchecks':self.early_stop_patience_epochchecks,
-			'save_mode':self.save_mode,
-		}
-
-		### LOSSES K
-		self.history_dict['finalloss_evolution_k'] = {
-			'train':[],
-		}
-		self.history_dict['sublosses_evolution_k'] = {
-			'train':{},
-		}
-		### LOSSES EPOCHCHECK
-		self.history_dict['finalloss_evolution_epochcheck'] = {
-			'train':[],
-			'val':[],
-		}
-		self.history_dict['sublosses_evolution_epochcheck'] = {
-			'train':{},
-			'val':{},
-		}
-		self.set_metrics_hist()
-		self.set_opt_hist()
-
-		### TIMES AND CONV
-		self.history_dict['mins_evolution_epoch'] = {
-			'train':[],
-		}
-		self.history_dict['global_mins_evolution_epoch'] = {
-			'train':[],
-		}
-		self.history_dict['best_epoch'] = 0
+		self.best_epoch = np.infty
 		self.last_saved_filedir = None
+		self.reset()
 
-	### losses methods
-	def get_sublosses_names(self):
-		return list(self.history_dict['sublosses_evolution_k']['train'].keys())
+	def reset(self):
+		self.counter_k.reset()
+		self.counter_epoch.reset()
 
-	def add_loss_history(self, loss_value):
-		self.history_dict['finalloss_evolution_k']['train'].append(loss_value)
+	### repr
+	def get_metrics_repr(self):
+		return f'(target_metric_crit: {self.target_metric_crit})' if self.save_mode in [C_.SM_ONLY_INF_METRIC, C_.SM_ONLY_SUP_METRIC] else ''
 
-	def add_subloss_history(self, dict_name, set_name, subloss_name, subloss_value):
-		if not subloss_name in self.history_dict[dict_name][set_name].keys():
-			self.history_dict[dict_name][set_name][subloss_name] = []
-		self.history_dict[dict_name][set_name][subloss_name].append(subloss_value)
+	def __repr__(self):
+		txt = ''
+		txt += f'[{self.name}]'+'\n'
+		txt += f' - opt-parameters: {len(self.optimizer):,}[p] - device: {self.optimizer.device()}'+'\n'
+		txt += f' - save-mode: {self.save_mode}{self.get_metrics_repr()}'+'\n'
+		txt += f' - counter_k: {self.counter_k} - counter_epoch: {self.counter_epoch}'+'\n'
+		return txt[:-1]
 
-	### optimizer methods
-	def set_opt_hist(self):
-			self.history_dict['opt_kwargs_evolution_epoch'] = {opt_key:[] for opt_key in self.optimizer.get_opt_kwargs()}
-
-	### metrics method
-	def set_last_saved_filedir(self, last_saved_filedir):
-		self.last_saved_filedir = last_saved_filedir
-
-	def set_metrics_hist(self):
-		self.metric_names = [m.name for m in self.metrics]
-		self.history_dict['metrics_evolution_epochcheck'] = {
-			'train':{mn:[] for mn in self.metric_names},
-			'val':{mn:[] for mn in self.metric_names},
+	def get_save_dict(self):
+		info = {
+			'save_mode':self.save_mode,
+			'target_metric_crit':self.target_metric_crit,
+			'counter_k':self.counter_k,
+			'counter_epoch':self.counter_epoch,
+			'best_epoch':self.best_epoch,
+			'last_saved_filedir':self.last_saved_filedir,
 		}
-		self.target_metric_crit = self.metric_names[0] if self.target_metric_crit is None and len(self.metrics)>0 else self.target_metric_crit # by default
+		return {
+			'info':info,
+			'loss_df':self.loss_df,
+			'opt_df':self.opt_df,
+			'loss_df_epoch':self.loss_df_epoch,
+			'metrics_df_epoch':self.metrics_df_epoch,
+		}
+
+	### history methods
+	def add_loss_history_k(self, loss,
+		dt=0,
+		):
+		if self.counter_k.check('k'):
+			assert isinstance(loss, ft_losses.LossResult)
+			new_df = loss.get_info_df()
+			new_df = pd.concat([pd.DataFrame([[dt]], columns=['__dt__']), new_df], axis=1)
+			new_df = get_formated_df(new_df, self.counter_k.get_global_count(), 'k')
+			self.loss_df = new_df if not hasattr(self, 'loss_df') else pd.concat([self.loss_df, new_df])
+
+	def add_opt_history_epoch(self):
+		new_df = self.optimizer.get_info_df()
+		new_df = pd.concat([pd.DataFrame([[self.counter_k.get_global_count()]], columns=['__k__']), new_df], axis=1)
+		new_df = get_formated_df(new_df, self.counter_epoch.get_global_count(), 'epoch')
+		self.opt_df = new_df if not hasattr(self, 'opt_df') else pd.concat([self.opt_df, new_df])
+
+	def add_loss_history_epoch(self, loss,
+		dt=0,
+		set_name=None,
+		):
+		if self.counter_epoch.check('val_epoch'):
+			assert isinstance(loss, ft_losses.LossResult)
+			new_df = loss.get_info_df()
+			c = ['__dt__'] if set_name is None else ['__dt__', '__set__']
+			v = [dt] if set_name is None else [dt, set_name]
+			new_df = pd.concat([pd.DataFrame([v], columns=c), new_df], axis=1)
+			new_df = get_formated_df(new_df, self.counter_epoch.get_global_count(), 'val_epoch')
+			self.loss_df_epoch = new_df if not hasattr(self, 'loss_df_epoch') else pd.concat([self.loss_df_epoch, new_df])
+
+	def add_metric_history_epoch(self, metrics_dict,
+		dt=0,
+		set_name=None,
+		):
+		if self.counter_epoch.check('val_epoch'):
+			new_dfs = []
+			for mn in metrics_dict.keys():
+				metric = metrics_dict[mn]
+				assert isinstance(metric, ft_metrics.MetricResult)
+				df = metric.get_info_df()
+				df.rename(columns={'__metric__':mn}, inplace=True)
+				new_dfs.append(df)
+
+			c = ['__dt__'] if set_name is None else ['__dt__', '__set__']
+			v = [dt] if set_name is None else [dt, set_name]
+			new_df = pd.concat([pd.DataFrame([v], columns=c)]+new_dfs, axis=1)
+			new_df = get_formated_df(new_df, self.counter_epoch.get_global_count(), 'val_epoch')
+			self.metrics_df_epoch = new_df if not hasattr(self, 'metrics_df_epoch') else pd.concat([self.metrics_df_epoch, new_df])
+
+	def get_metric_names(self):
+		return [m.name for m in self.metrics]
 
 	### along training methods
+	def k_update(self):
+		self.counter_k.update()
 
 	def epoch_update(self):
-		self.optimizer.epoch_update()
-		self.epoch_counter += 1
-		#print('epoch_counter',self.epoch_counter)
+		self.counter_epoch.update()
+		if self.counter_epoch.check('earlystop_epoch'):
+			raise ex.TrainingInterruptedError()
+
+	def set_last_saved_filedir(self, last_saved_filedir):
+		self.last_saved_filedir = last_saved_filedir
 
 	def needs_save(self):
 		return not self.save_mode==C_.SM_NO_SAVE
@@ -121,37 +156,35 @@ class LossMonitor(object):
 	def eval(self):
 		self.optimizer.eval()
 
-	def early_stop_check(self):
-		if self.epochcheck_counter >= self.early_stop_patience_epochchecks:
-			raise ex.TrainingInterruptedError()
+	def needs_evaluation(self):
+		return self.counter_epoch.check('val_epoch')
 
 	def reset_early_stop(self):
-		#print('reset')
-		self.epochcheck_counter = 0
-
-	def can_be_evaluated(self):
-		return self.epoch_counter >= self.early_stop_epochcheck_epochs
-
-	def evaluated(self):
-		self.epoch_counter = 0
-		if not self.save_mode==C_.SM_NO_SAVE:
-			self.epochcheck_counter += 1
+		self.counter_epoch.reset_cn('earlystop_epoch')
 
 	### get statistics
-	def get_mins_per_epoch(self):
-		mins_per_epoch = self.history_dict['mins_evolution_epoch']['train']
-		return np.array(mins_per_epoch).mean()
-
-	def get_mins_to_convergence(self):
-		mins_per_epoch = self.history_dict['mins_evolution_epoch']['train']
-		best_epoch = self.get_best_epoch()
-		return np.array(mins_per_epoch)[:best_epoch].sum() # in mins
-
 	def get_best_epoch(self):
-		return self.history_dict['best_epoch']
+		return self.best_epoch
 
 	def set_best_epoch(self, best_epoch):
-		self.history_dict['best_epoch'] = best_epoch
+		self.best_epoch = best_epoch
+
+	def get_time_per_iteration(self):
+		return XError(self.loss_df['__dt__'].values)
+
+	def get_evaluation_set_names(self):
+		return list(np.unique(self.loss_df_epoch['__set__'].values))
+
+	def get_time_per_epoch_set(self, set_name):
+		return XError(self.loss_df_epoch['__dt__'][self.loss_df_epoch['__set__'].isin([set_name])].values)
+
+	def get_time_per_epoch(self):
+		return sum([self.get_time_per_epoch_set(set_name) for set_name in self.get_evaluation_set_names()])
+
+	def get_total_time(self):
+		t = self.loss_df['__dt__'].values.sum()
+		t += sum([self.loss_df_epoch['__dt__'][self.loss_df_epoch['__set__'].isin([set_name])].values.sum() for set_name in self.get_evaluation_set_names()])
+		return t
 
 	### file methods
 	def remove_filedir(self, filedir):
@@ -169,6 +202,7 @@ class LossMonitor(object):
 			return True
 
 		elif self.save_mode==C_.SM_ONLY_INF_LOSS:
+			assert 0
 			loss_evolution = np.array(self.history_dict['finalloss_evolution_epochcheck'][set_name])
 			if len(loss_evolution)<=1:
 				return True # always save first and dont delete anything
@@ -182,6 +216,7 @@ class LossMonitor(object):
 			return False
 
 		elif self.save_mode==C_.SM_ONLY_INF_METRIC:
+			assert 0
 			metric_evolution = np.array(self.history_dict['metrics_evolution_epochcheck'][set_name][self.target_metric_crit])
 			if len(metric_evolution)<=1:
 				return True # always save first and dont delete anything
@@ -195,29 +230,18 @@ class LossMonitor(object):
 			return False
 		
 		elif self.save_mode==C_.SM_ONLY_SUP_METRIC:
-			metric_evolution = np.array(self.history_dict['metrics_evolution_epochcheck'][set_name][self.target_metric_crit])
+			metric_evolution = self.metrics_df_epoch[self.target_metric_crit][self.metrics_df_epoch['__set__'].isin([set_name])].values
 			if len(metric_evolution)<=1:
 				return True # always save first and dont delete anything
 
-			actual_metric_val = metric_evolution[-1]
-			metric_history = metric_evolution[:-1]
+			metric_history = metric_evolution[:-1] # history
+			actual_metric_val = metric_evolution[-1] # last one
 
 			if actual_metric_val>np.max(metric_history): # must save and delete
 				self.remove_filedir(self.last_saved_filedir) # remove last best model
 				return True
-			return False
+			else:
+				return False
 
 		else:
 			raise Exception(f'save mode {self.save_mode} not supported')
-
-	### repr
-	def get_metrics_repr(self):
-		return f'(target_metric_crit: {self.target_metric_crit})' if self.save_mode in [C_.SM_ONLY_INF_METRIC, C_.SM_ONLY_SUP_METRIC] else ''
-
-	def __repr__(self):
-		txt = ''
-		txt += f'[{self.name}]'+'\n'
-		txt += f' - opt-parameters: {len(self.optimizer):,}[p] - device: {self.optimizer.device()}'+'\n'
-		txt += f' - save-mode: {self.save_mode}{self.get_metrics_repr()}'+'\n'
-		txt += f' - early_stop_epochcheck_epochs: {self.early_stop_epochcheck_epochs} - early_stop_patience_epochchecks: {self.early_stop_patience_epochchecks}'+'\n'
-		return txt[:-1]
