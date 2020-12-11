@@ -27,9 +27,9 @@ class LossMonitor(object):
 	def __init__(self, loss, optimizer, metrics,
 		save_mode:str=C_.SM_NO_SAVE,
 		target_metric_crit:str=None,
-		k_counter_duration:int=0,
-		val_epoch_counter_duration:int=0,
-		earlystop_epoch_duration:int=21,
+		k_counter_duration:int=C_.K_COUNTER_DURATION,
+		val_epoch_counter_duration:int=C_.VAL_EPOCH_COUNTER_DURATION,
+		earlystop_epoch_duration:int=C_.EARLYSTOP_EPOCH_DURATION,
 		**kwargs):
 		assert isinstance(loss, ft_losses.FTLoss)
 		assert isinstance(metrics, list) and all([isinstance(metric, ft_metrics.FTMetric) for metric in metrics])
@@ -55,14 +55,13 @@ class LossMonitor(object):
 		self.counter_epoch.reset()
 
 	### repr
-	def get_metrics_repr(self):
-		return f'(target_metric_crit: {self.target_metric_crit})' if self.save_mode in [C_.SM_ONLY_INF_METRIC, C_.SM_ONLY_SUP_METRIC] else ''
-
 	def __repr__(self):
+		def get_metrics_repr():
+			return f'(target_metric_crit: {self.target_metric_crit})' if self.save_mode in [C_.SM_ONLY_INF_METRIC, C_.SM_ONLY_SUP_METRIC] else ''
 		txt = ''
 		txt += f'[{self.name}]'+'\n'
 		txt += f' - opt-parameters: {len(self.optimizer):,}[p] - device: {self.optimizer.device()}'+'\n'
-		txt += f' - save-mode: {self.save_mode}{self.get_metrics_repr()}'+'\n'
+		txt += f' - save-mode: {self.save_mode}{get_metrics_repr()}'+'\n'
 		txt += f' - counter_k: {self.counter_k} - counter_epoch: {self.counter_epoch}'+'\n'
 		return txt[:-1]
 
