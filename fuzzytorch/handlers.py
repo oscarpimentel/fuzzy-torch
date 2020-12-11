@@ -87,6 +87,7 @@ class ModelTrainHandler(object):
 			for lmonitor in self.lmonitors:
 				lmonitor.set_last_saved_filedir(saved_filedir)
 				lmonitor.reset_early_stop() # refresh counters for all
+				#print(lmonitor.name, epoch, lmonitor.counter_epoch.get_global_count())
 				lmonitor.set_best_epoch(epoch)
 
 		return saved_filedir
@@ -144,7 +145,7 @@ class ModelTrainHandler(object):
 			to_delete_filedirs = [f for f in files.get_filedirs(self.complete_save_roodir) if files.get_dict_from_filedir(f)['id']==str(self.id)]
 			if len(to_delete_filedirs)>0:
 				epochs_to_delete = [int(files.get_dict_from_filedir(f)['epoch']) for f in to_delete_filedirs]
-				prints.print_red(f'> deleting previous epochs {epochs_to_delete} in: {self.complete_save_roodir} (id: {self.id})')
+				prints.print_red(f'> (id: {self.id}) deleting previous epochs: {epochs_to_delete} in: {self.complete_save_roodir}')
 				files.delete_filedirs(to_delete_filedirs, verbose=0)
 
 	def fit_loader(self, train_loader, val_loader,
@@ -168,7 +169,7 @@ class ModelTrainHandler(object):
 		global_train_cr = times.Cronometer()
 		can_be_in_loop = True
 		end_with_nan = False
-		for ke,epoch in enumerate(range(1, self.epochs_max+1)): # for epochs
+		for ke,epoch in enumerate(range(0, self.epochs_max+1)): # for epochs
 			model_kwargs.update({'epoch':epoch})
 			try:
 				if can_be_in_loop:
@@ -198,7 +199,8 @@ class ModelTrainHandler(object):
 							lmonitor.k_update() # update k
 
 						if ki>6:
-							break
+							#break # debug
+							pass
 						
 						### TEXT
 						bar_text_dic['train'] = backprop_text + ''.join(losses_text_list)
@@ -229,7 +231,6 @@ class ModelTrainHandler(object):
 					for lmonitor in self.lmonitors:
 						lmonitor.epoch_update() # update epoch
 						text += f'[{lmonitor.name}] counter_epoch: {lmonitor.counter_epoch})'
-
 					bar_text_dic['early-stop'] = text
 					self.update_bar(training_bar, bar_text_dic, True)
 
