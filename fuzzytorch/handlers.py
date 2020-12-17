@@ -230,7 +230,7 @@ class ModelTrainHandler(object):
 					text = f'[stop]'
 					for lmonitor in self.lmonitors:
 						lmonitor.epoch_update() # update epoch
-						text += f'[{lmonitor.name}] counter_epoch: {lmonitor.counter_epoch})'
+						text += f'[{lmonitor.name}] counter_epoch: {lmonitor.counter_epoch}'
 					bar_text_dic['early-stop'] = text
 					self.update_bar(training_bar, bar_text_dic, True)
 
@@ -249,13 +249,13 @@ class ModelTrainHandler(object):
 
 		training_bar.done()
 		print(strings.get_bar())
-		print('End of training!')
+		print('End of training!!!')
 		for lmonitor in self.lmonitors:
-			text = f'[{lmonitor.name}] best_epoch: {lmonitor.get_best_epoch()}'
-			text = f' - time_per_iteration: {lmonitor.get_time_per_iteration()}[segs]'
-			text += f' - time_per_epoch: {lmonitor.get_time_per_epoch()/60.}[mins]'
-			text += f' - total_time: {lmonitor.get_total_time()/60.}[mins]'
-			print(text)
+			txt = f'[{lmonitor.name}] best_epoch: {lmonitor.get_best_epoch()}'
+			txt += f' - time_per_iteration: {lmonitor.get_time_per_iteration()}[segs]'
+			txt += f' - time_per_epoch: {lmonitor.get_time_per_epoch()/60.}[mins]'
+			txt += f' - total_time: {lmonitor.get_total_time()/60.:3f}[mins]'
+			print(txt)
 		print(strings.get_bar(char=C_fc.TOP_SQUARE_CHAR))
 		no_error_train = not end_with_nan
 		return no_error_train

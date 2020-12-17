@@ -47,6 +47,9 @@ class TensorDict():
 		txt = txt[:-2]+'}'
 		return txt
 
+	def keys(self):
+		return self.d.keys()
+
 	def get_dict(self):
 		d = {}
 		for key in self.d.keys():

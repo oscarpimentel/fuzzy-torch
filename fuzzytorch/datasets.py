@@ -16,5 +16,5 @@ def dict_to_tensor_dict(d):
 		return TensorDict({key:dict_to_tensor_dict(d[key]) for key in d.keys()})
 
 def tensor_data_collate(batch):
-	d = default_collate([b.get_dict() for b in batch])
-	return dict_to_tensor_dict(d)
+	batch_dicts = [b.get_dict() for b in batch]
+	return dict_to_tensor_dict(default_collate(batch_dicts))
