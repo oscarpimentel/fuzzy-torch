@@ -4,7 +4,6 @@ from . import C_
 
 import torch
 import torch.nn.functional as F
-from .datasets import TensorDict
 from flamingchoripan.strings import xstr
 from . import exceptions as ex
 import numpy as np
@@ -138,7 +137,6 @@ class CrossEntropy(FTLoss):
 
 	def __call__(self, tensor_dict,
 		**kwargs):
-		assert isinstance(tensor_dict, TensorDict)
 		y_pred = tensor_dict['output']['y']
 		y_target = tensor_dict['target']['y']
 		

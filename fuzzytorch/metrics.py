@@ -4,7 +4,6 @@ from . import C_
 
 import torch
 import torch.nn.functional as F
-from .datasets import TensorDict
 from flamingchoripan.strings import xstr
 import pandas as pd
 
@@ -65,7 +64,6 @@ class DummyAccuracy(FTMetric):
 		self.name = name
 
 	def __call__(self, tensor_dict):
-		assert isinstance(tensor_dict, TensorDict)
 		y_pred = tensor_dict['output']['y']
 		y_target = tensor_dict['target']['y']
 		m = torch.ones((len(y_pred)))/y_pred.shape[-1]*100
@@ -79,7 +77,6 @@ class OnehotAccuracy(FTMetric):
 		self.target_is_onehot = target_is_onehot
 
 	def __call__(self, tensor_dict):
-		assert isinstance(tensor_dict, TensorDict)
 		y_pred = tensor_dict['output']['y']
 		y_target = tensor_dict['target']['y']
 		

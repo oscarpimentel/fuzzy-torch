@@ -2,7 +2,6 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 import random
-from fuzzytorch.utils import TensorDict
 
 class MyDataset(Dataset):
 	def __init__(self, x:np.ndarray, y:np.ndarray,
@@ -78,8 +77,7 @@ class MyDataset(Dataset):
 		x = self.norm_item(x) # (c,h,w)
 		x = self.apply_da(x) # (c,h,w)
 		y = self.y[idx] # (N) > ()
-		tensor_dict = TensorDict({
-			'input':TensorDict({'x':x, 'x2':x[0][0]}),
-			'target':TensorDict({'y':y, 'y2':y[None],}),
-			})
-		return tensor_dict
+		return {
+			'input':{'x':x, 'x2':x[0][0]},
+			'target':{'y':y, 'y2':y[None],},
+			}

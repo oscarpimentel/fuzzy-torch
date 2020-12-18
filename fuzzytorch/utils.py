@@ -10,49 +10,45 @@ import flamingchoripan.strings as strings
 def get_model_name(model_name_dict):
 	return strings.get_string_from_dict(model_name_dict)
 
+def tdict_to_device(d, device):
+	if isinstance(d, dict):
+		for k in d.keys():
+			x = d[k]
+			tdict_to_device(x, device)
+	elif isinstance(d, torch.Tensor):
+		d.to(device)
+	else:
+		pass
+
+def get_tdict_repr(d):
+	if isinstance(d, dict):
+		return '{'+', '.join([f'{k}{get_tdict_repr(d[k])}' for k in d.keys()])+'}'
+	elif isinstance(d, torch.Tensor):
+		x = d
+		shape_txt = '' if len(x.shape)==0 else ', '.join([str(i) for i in x.shape])
+		return f'({shape_txt})-{str(x.dtype)[6:]}-{x.device}'
+	else:
+		return ''
+
 ###################################################################################################################################################
 
-class TensorDict():
+class TDictHolder():
 	def __init__(self, d):
 		assert isinstance(d, dict)
-		assert all([isinstance(d[key], torch.Tensor)  for key in d.keys()]) or all([isinstance(d[key], TensorDict) for key in d.keys()])
-		assert all([not key=='d' for key in d.keys()])
 		self.d = d
 
 	def to(self, device):
-		for key in self.d.keys():
-			self.d[key] = self.d[key].to(device)
-		return self
-
-	def add(self, key, x):
-		assert isinstance(x, torch.Tensor) or isinstance(x, TensorDict)
-		self.d[key] = x
+		tdict_to_device(self.d, device)
+		return self.d
 
 	def __getitem__(self, key):
 		return self.d[key]
 
 	def __repr__(self):
-		txt = '{'
-		for key in self.d.keys():
-			x = self.d[key]
-			txt += f"'{key}': "
-			if isinstance(x, TensorDict):
-				txt += str(x)
-			else:
-				shape = '' if len(x.shape)==0 else ', '.join([str(i) for i in x.shape])
-				t = str(x.dtype)[6:]
-				txt += f'({shape})-{t}-{x.device}'
-			txt += ', '
-
-		txt = txt[:-2]+'}'
-		return txt
+		return get_tdict_repr(self.d)
 
 	def keys(self):
 		return self.d.keys()
 
-	def get_dict(self):
-		d = {}
-		for key in self.d.keys():
-			x = self.d[key]
-			d[key] = x if isinstance(x, torch.Tensor) else x.get_dict()
-		return d
+	def get_tdict(self):
+		return self.d

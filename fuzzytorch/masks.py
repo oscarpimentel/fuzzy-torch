@@ -12,9 +12,10 @@ def get_last_element(x, onehot):
 	x = (b,t,f)
 	onehot = (b,t)
 	'''
-	assert len(x.shape)==3
+	assert onehot.dtype==torch.bool
 	assert len(onehot.shape)==2
 	assert x.shape[:-1]==onehot.shape
+	assert len(x.shape)==3
 
 	b,t,f = x.size()
 	indexs = torch.sum(onehot[...,None], dim=1)-1 # (b,t,1) > (b,1) # -1 because index is always 1 unit less than length
@@ -28,9 +29,10 @@ def get_max_element(x, onehot):
 	x = (b,t,f)
 	onehot = (b,t)
 	'''
-	assert len(x.shape)==3
+	assert onehot.dtype==torch.bool
 	assert len(onehot.shape)==2
 	assert x.shape[:-1]==onehot.shape
+	assert len(x.shape)==3
 
 	b,t,f = x.size()
 	new_onehot = onehot.clone()

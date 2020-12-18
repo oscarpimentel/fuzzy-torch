@@ -197,21 +197,27 @@ class MLRNN(nn.Module):
 	def get_output_dims(self):
 		return self.output_dims
 
-	def forward(self, x, lengths, **kwargs):
+	def forward(self, x, onehot, **kwargs):
 		'''
 		Parameters
 		----------
-		x: (b,t,f): input tensor.
-		lengths: (b): input curve lengths.
+		x (b,t,f): input tensor.
+		onehot (b,t)
 
 		Return
 		----------
 		x_out: (b,t,h): output tensor.
 		'''
+		assert onehot.dtype==torch.bool
+		assert len(onehot.shape)==2
+		assert x.shape[:-1]==onehot.shape
+		assert len(x.shape)==3
+
 		extra_info = {}
+		lengths = torch.clamp(onehot.sum(dim=-1), 1, None) # forced 1 to avoid errors of empty bands sequences
 		x_packed = nn.utils.rnn.pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False) # argument is tensor
-		for k in range(self.layers):
-			x_packed = self.rnn_stack[k](x_packed)
+		for k,rnn in enumerate(self.rnns):
+			x_packed = rnn(x_packed)
 		x,_ = nn.utils.rnn.pad_packed_sequence(x_packed, batch_first=True, padding_value=0, total_length=self.max_curve_length) # argument is Sequence
 		return x, extra_info
 
@@ -235,6 +241,24 @@ class MLGRU(MLRNN):
 		**kwargs):
 		self.class_name = 'GRU'
 		self.rnn_class = GRU
+		super().__init__(input_dims, output_dims, embd_dims_list, max_curve_length,
+			in_dropout,
+			dropout,
+			out_dropout,
+			bias,
+			bidirectional,
+			)
+
+class MLLSTM(MLRNN):
+	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, max_curve_length:int,
+		in_dropout=0.0,
+		dropout=0.0,
+		out_dropout=0.0,
+		bias=True,
+		bidirectional=False,
+		**kwargs):
+		self.class_name = 'LSTM'
+		self.rnn_class = LSTM
 		super().__init__(input_dims, output_dims, embd_dims_list, max_curve_length,
 			in_dropout,
 			dropout,

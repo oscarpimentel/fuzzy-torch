@@ -7,7 +7,7 @@ import torch
 import numpy as np
 
 from flamingchoripan.progress_bars import ProgressBarMultiColor
-from .datasets import TensorDict
+from .utils import TDictHolder
 from flamingchoripan import C_ as C_fc
 from flamingchoripan import times
 from flamingchoripan import files
@@ -109,11 +109,11 @@ class ModelTrainHandler(object):
 					if self.uses_train_eval_loader_methods:
 						set_loader.eval() # dataset eval mode!
 					self.model.eval() # model eval mode!
-					for k,in_tensor_dict in enumerate(set_loader): # batches loop
-						out_tensor_dict = self.model(in_tensor_dict.to(self.device), **model_kwargs)
-						set_loss.append(lmonitor.loss(out_tensor_dict))
+					for k,in_tdict in enumerate(set_loader): # batches loop
+						out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **model_kwargs)
+						set_loss.append(lmonitor.loss(out_tdict))
 						for metric in lmonitor.metrics:
-							set_metrics_dict[metric.name].append(metric(out_tensor_dict))
+							set_metrics_dict[metric.name].append(metric(out_tdict))
 
 					### save loss to history & bar text
 					set_loss = sum(set_loss)/len(set_loss)
@@ -177,8 +177,7 @@ class ModelTrainHandler(object):
 					if self.uses_train_eval_loader_methods:
 						train_loader.train() # dataset train mode!
 
-					for ki,in_tensor_dict in enumerate(train_loader): # batches loop - k
-						assert isinstance(in_tensor_dict, TensorDict)
+					for ki,in_tdict in enumerate(train_loader): # batches loop - k
 						backprop_text = f'id: {self.id} - epoch: {epoch:,}/{self.epochs_max:,}({ki:,}/{ks_epochs:,})'
 						losses_text_list = []
 						for kt,lmonitor in enumerate(self.lmonitors): # along train lmonitors
@@ -188,8 +187,10 @@ class ModelTrainHandler(object):
 
 							lmonitor.train() # model train mode!
 							lmonitor.optimizer.zero_grad() # set gradient to 0
-							out_tensor_dict = self.model(in_tensor_dict.to(self.device), **model_kwargs) # Feed forward
-							loss = lmonitor.loss(out_tensor_dict)
+
+							#print(TDictHolder(in_tdict))
+							out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **model_kwargs) # Feed forward
+							loss = lmonitor.loss(out_tdict)
 							loss.get_loss(numpy=False).backward() # gradient calculation
 							lmonitor.optimizer.step() # step gradient
 

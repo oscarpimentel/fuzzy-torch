@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from fuzzytorch.models.basics import MLP
 from fuzzytorch.models.cnn.basics import MLConv2D
-from fuzzytorch.datasets import TensorDict
 from fuzzytorch.utils import get_model_name
 import numpy as np
 
@@ -39,12 +38,12 @@ class MLPClassifier(nn.Module):
 	def get_output_dims(self):
 		return self.classifier.get_output_dims()
 	
-	def forward(self, tensor_dict, **kwargs):
-		x = tensor_dict['input']['x']
+	def forward(self, tdict, **kwargs):
+		x = tdict['input']['x']
 		x = x.view(x.shape[0],-1) # flatten
 		x = self.classifier(x)
-		tensor_dict.add('output', TensorDict({'y':x}))
-		return tensor_dict
+		tdict['output'] = {'y':x}
+		return tdict
 
 class CNN2DClassifier(nn.Module):
 	def __init__(self,
@@ -107,12 +106,12 @@ class CNN2DClassifier(nn.Module):
 	def get_output_dims(self):
 		return self.output_dims
 	
-	def forward(self, tensor_dict, **kwargs):
-		x = tensor_dict['input']['x']
+	def forward(self, tdict, **kwargs):
+		x = tdict['input']['x']
 		x = self.ml_cnn2d(x)
 		x = self.forward_mlp_classifier(x) if self.uses_mlp_classifier else self.forward_custom_classifier(x)
-		tensor_dict.add('output', TensorDict({'y':x}))
-		return tensor_dict
+		tdict['output'] = {'y':x}
+		return tdict
 
 	def forward_mlp_classifier(self, x):
 		x = x.view(x.shape[0],-1) # flatten
