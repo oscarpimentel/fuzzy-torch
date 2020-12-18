@@ -32,9 +32,9 @@ class MetricResult():
 		return f'{xstr(self.get_metric())}'
 
 	def __add__(self, other):
-		if other==0:
+		if other==0 or other is None:
 			return self
-		elif self==0:
+		elif self==0 or self is None:
 			return other
 		else:
 			m = MetricResult(self.batch_metric+other.batch_metric)
