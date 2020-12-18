@@ -100,17 +100,14 @@ class MLP(nn.Module):
 		**kwargs):
 		super().__init__()
 		### CHECKS
-		assert isinstance(embd_dims_list, list) and len(embd_dims_list)>0
+		assert isinstance(embd_dims_list, list) and len(embd_dims_list)>=0
 		assert dropout>=0 and dropout<=1
 
 		self.input_dims = input_dims
 		self.output_dims = output_dims
-		self.embd_dims_list = embd_dims_list.copy()
+		self.embd_dims_list = [self.input_dims]+embd_dims_list+[self.output_dims]
 		self.dropout = dropout
 		self.last_activation = last_activation
-
-		self.embd_dims_list.insert(0, self.input_dims) # first
-		self.embd_dims_list.append(self.output_dims) # last
 
 		activations = [activation]*(len(self.embd_dims_list)-1) # create activations along
 		if not self.last_activation is None:
@@ -134,6 +131,9 @@ class MLP(nn.Module):
 		for fc in self.fcs:
 			fc.reset()
 
+	def get_embd_dims_list(self):
+		return self.embd_dims_list
+		
 	def get_output_dims(self):
 		return self.output_dims
 

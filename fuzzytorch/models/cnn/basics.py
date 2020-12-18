@@ -27,6 +27,7 @@ class ConvLinear(nn.Module):
 		padding_mode=C_.DEFAULT_PADDING_MODE,
 		**kwargs):
 		super().__init__()
+
 		### CHECKS
 		assert len(input_space)==self.len_input_space_shape
 		assert in_dropout>=0 and in_dropout<=1
@@ -100,6 +101,9 @@ class ConvLinear(nn.Module):
 		assert list(x.shape)[-self.len_input_space_shape:]==self.get_output_space()
 		return x
 
+	def __len__(self):
+		return utils.count_parameters(self)
+
 	def extra_repr(self):
 		txt = strings.get_string_from_dict({
 		'input_dims':self.input_dims,
@@ -118,9 +122,6 @@ class ConvLinear(nn.Module):
 		'bias':self.bias,
 		}, ', ', '=')
 		return txt
-
-	def __len__(self):
-		return utils.count_parameters(self)
 
 	def __repr__(self):
 		txt = f'{self.class_name}({self.extra_repr()})'
@@ -144,18 +145,15 @@ class MLConv(nn.Module):
 		**kwargs):
 		super().__init__()
 		### CHECKS
-		assert isinstance(embd_dims_list, list) and len(embd_dims_list)>0
+		assert isinstance(embd_dims_list, list) and len(embd_dims_list)>=0
 		assert dropout>=0 and dropout<=1
 
 		self.input_dims = input_dims
 		self.input_space = input_space
 		self.output_dims = output_dims
-		self.embd_dims_list = embd_dims_list.copy()
+		self.embd_dims_list = [self.input_dims]+embd_dims_list+[self.output_dims]
 		self.dropout = dropout
 		self.last_activation = last_activation
-
-		self.embd_dims_list.insert(0, self.input_dims) # first
-		self.embd_dims_list.append(self.output_dims) # last
 
 		activations = [activation]*(len(self.embd_dims_list)-1) # create activations along
 		if not self.last_activation is None:
@@ -189,6 +187,9 @@ class MLConv(nn.Module):
 		for cnn in self.cnns:
 			cnn.reset()
 
+	def get_embd_dims_list(self):
+		return self.embd_dims_list
+		
 	def get_output_dims(self):
 		return self.cnns[-1].get_output_dims()
 
