@@ -93,7 +93,7 @@ class LossResult():
 			return f'{lv}'
 		else:
 			txt = '|'.join([f'{batch_subloss}={xstr(self.get_subloss(batch_subloss))}' for batch_subloss in batch_sublosses])
-			return f'{lv}({txt})'
+			return f'{lv} ({txt})'
 
 	def __add__(self, other):
 		if other==0 or other is None:

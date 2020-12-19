@@ -7,7 +7,6 @@ import torch
 import numpy as np
 
 from flamingchoripan.progress_bars import ProgressBarMultiColor
-from .utils import TDictHolder
 from flamingchoripan import C_ as C_fc
 from flamingchoripan import times
 from flamingchoripan import files
@@ -16,7 +15,8 @@ from flamingchoripan import prints
 import warnings
 from . import monitors as mon
 from . import exceptions as ex
-from .utils import get_model_name
+from .utils import get_model_name, TDictHolder
+from .models.utils import count_parameters
 
 ###################################################################################################################################################
 
@@ -64,8 +64,9 @@ class ModelTrainHandler(object):
 	def __repr__(self):
 		txt = ''
 		txt += strings.get_bar(char=C_fc.BOT_SQUARE_CHAR) + '\n'
-		txt += strings.color_str(f'model_name: {self.model.get_name()} - id: {self.id}', 'blue') + '\n'
-		txt += strings.color_str(f'device: {self.device} - device_name: {self.device_name}', 'green') + '\n'
+		txt += strings.color_str(f'model_name: {self.model.get_name()}({count_parameters(self.model):,}[p])', 'blue')+'\n'
+		txt += strings.color_str(f'id: {self.id}', 'blue')+'\n'
+		txt += strings.color_str(f'device: {self.device} - device_name: {self.device_name}', 'green')+'\n'
 		txt += f'save_rootdir: {self.complete_save_roodir}' + '\n'
 		for lmonitor in self.lmonitors:
 			txt += str(lmonitor) + '\n'
