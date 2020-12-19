@@ -31,21 +31,22 @@ class LossMonitor(object):
 		val_epoch_counter_duration:int=C_.VAL_EPOCH_COUNTER_DURATION,
 		earlystop_epoch_duration:int=C_.EARLYSTOP_EPOCH_DURATION,
 		**kwargs):
+
+		### CHECKS
 		assert isinstance(loss, ft_losses.FTLoss)
+		metrics = [metrics] if isinstance(metric, ft_metrics.FTMetric) else metrics
 		assert isinstance(metrics, list) and all([isinstance(metric, ft_metrics.FTMetric) for metric in metrics])
 		assert isinstance(optimizer, ft_optimizers.LossOptimizer)
 
-		### ATTRIBUTES
 		self.loss = loss
 		self.optimizer = optimizer
 		self.metrics = metrics
-		self.name = loss.name
-
 		self.save_mode = save_mode
 		self.target_metric_crit = metrics[0].name if target_metric_crit is None else target_metric_crit
 		self.counter_k = Counter({'k': k_counter_duration})
 		self.counter_epoch = Counter({'val_epoch':val_epoch_counter_duration, 'earlystop_epoch':earlystop_epoch_duration})
-
+		
+		self.name = loss.name
 		self.best_epoch = np.infty
 		self.last_saved_filedir = None
 		self.reset()

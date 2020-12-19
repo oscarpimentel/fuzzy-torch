@@ -11,16 +11,16 @@ import pandas as pd
 
 ###################################################################################################################################################
 
-def batch_crossentropy_manual(y_pred, y_target,
+def batch_xentropy_manual(y_pred, y_target,
 	class_weight=None,
 	):
 	assert y_pred.size()==y_target.size()
 	batch_loss = -torch.sum(y_target.float() * torch.log(y_pred+EPS), dim=-1) # (b,...,c) > (b,...)
 	return batch_loss # (b,...)
 
-def batch_crossentropy(y_pred, y_target,
+def batch_xentropy(y_pred, y_target,
 	model_output_is_with_softmax:bool=False,
-	target_is_onehot:bool=True,
+	target_is_onehot:bool=False,
 	class_weight=None,
 	):
 	# F.cross_entropy already uses softmax as preprocessing internally
@@ -29,7 +29,7 @@ def batch_crossentropy(y_pred, y_target,
 	no_classes_shape = y_pred.size()[:-1]
 	if target_is_onehot: # [[01],[10],[01],[01],[10]]
 		if model_output_is_with_softmax:
-			batch_loss = batch_crossentropy_manual(y_pred, y_target) # (b,...,c) > (b,...) # ugly case
+			batch_loss = batch_xentropy_manual(y_pred, y_target) # (b,...,c) > (b,...) # ugly case
 		else:
 			assert y_pred.shape==y_target.shape
 			y_pred = y_pred.view(-1, classes)
@@ -52,15 +52,16 @@ def batch_crossentropy(y_pred, y_target,
 ###################################################################################################################################################
 
 class LossResult():
-	def __init__(self, batch_loss,
+	def __init__(self, batch_loss_,
 		reduction_mode='mean',
 		):
-		assert len(batch_loss.shape)==1
-		self.original_len = len(batch_loss)
+		assert len(batch_loss_.shape)==1
+		self.batch_loss_ = batch_loss_
+		self.len_ = len(self.batch_loss_)
 		self.reduction_mode = reduction_mode
 		self.batch_sublosses = {}
 		if self.reduction_mode=='mean':
-			self.batch_loss = batch_loss.mean()[None]
+			self.batch_loss = self.batch_loss_.mean()[None]
 
 	def add_subloss(self, name, batch_subloss):
 		assert len(batch_subloss.shape)==1
@@ -83,13 +84,13 @@ class LossResult():
 		return list(self.batch_sublosses.keys())
 
 	def __len__(self):
-		return self.original_len
+		return self.len_
 
 	def __repr__(self):
 		lv = f'{xstr(self.get_loss())}'
 		batch_sublosses = list(self.batch_sublosses.keys())
-		slv = '+'.join([xstr(self.get_subloss(batch_subloss)) for batch_subloss in batch_sublosses])
-		slvn = '+'.join([batch_subloss for batch_subloss in batch_sublosses])
+		slv = '/'.join([xstr(self.get_subloss(batch_subloss)) for batch_subloss in batch_sublosses])
+		slvn = '/'.join([batch_subloss for batch_subloss in batch_sublosses])
 		return f'{lv}={slv}({slvn})' if len(batch_sublosses)>0 else f'{lv}'
 
 	def __add__(self, other):
@@ -126,10 +127,10 @@ class FTLoss():
 		for key in kwargs.keys():
 			setattr(self, key, kwargs[key])
 
-class CrossEntropy(FTLoss):
+class XEntropy(FTLoss):
 	def __init__(self, name,
 			model_output_is_with_softmax:bool=False,
-			target_is_onehot:bool=True,
+			target_is_onehot:bool=False,
 			):
 		self.name = name
 		self.model_output_is_with_softmax = model_output_is_with_softmax
@@ -144,7 +145,7 @@ class CrossEntropy(FTLoss):
 		y_pred = tensor_dict['output']['y']
 		y_target = tensor_dict['target']['y']
 		
-		batch_loss = batch_crossentropy(y_pred, y_target, self.model_output_is_with_softmax, self.target_is_onehot) # (b,c) > (b)
+		batch_loss = batch_xentropy(y_pred, y_target, self.model_output_is_with_softmax, self.target_is_onehot) # (b,c) > (b)
 		loss_res = LossResult(batch_loss)
 		loss_res.add_subloss('loss/2', batch_loss/2)
 		loss_res.add_subloss('loss/3', batch_loss/3)

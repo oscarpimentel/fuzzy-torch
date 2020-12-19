@@ -29,8 +29,8 @@ class ModelTrainHandler(object):
 		delete_all_previous_epochs_files:bool=True,
 		extra_model_name_dict={},
 		):
-		if isinstance(lmonitors, mon.LossMonitor):
-			lmonitors = [lmonitors]
+		### CHECKS
+		lmonitors = [lmonitors] if isinstance(lmonitors, mon.LossMonitor) else lmonitors
 		assert isinstance(lmonitors, list) and all([isinstance(lmonitor, mon.LossMonitor) for lmonitor in lmonitors])
 
 		self.model = model
@@ -92,7 +92,7 @@ class ModelTrainHandler(object):
 
 		return saved_filedir
 
-	def evaluate_in_set(self, set_name:str, set_loader, model_kwargs:dict,
+	def evaluate_in_set(self, set_name:str, set_loader, training_kwargs:dict,
 		):
 		text = None
 		evaluated = False
@@ -111,11 +111,11 @@ class ModelTrainHandler(object):
 					self.model.eval() # model eval mode!
 					for ki,in_tdict in enumerate(set_loader): # batches loop
 						#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
-						out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **model_kwargs)
+						out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs)
 						#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
-						set_loss.append(lmonitor.loss(out_tdict))
+						set_loss.append(lmonitor.loss(out_tdict, **training_kwargs))
 						for metric in lmonitor.metrics:
-							set_metrics_dict[metric.name].append(metric(out_tdict))
+							set_metrics_dict[metric.name].append(metric(out_tdict, **training_kwargs))
 
 					### save loss to history & bar text
 					set_loss = sum(set_loss)/len(set_loss)
@@ -151,9 +151,9 @@ class ModelTrainHandler(object):
 				files.delete_filedirs(to_delete_filedirs, verbose=0)
 
 	def fit_loader(self, train_loader, val_loader,
-		model_kwargs:dict={},
 		load:bool=False,
 		k_every:int=1,
+		training_kwargs:dict={},
 		**kwargs):
 
 		if load:
@@ -172,7 +172,7 @@ class ModelTrainHandler(object):
 		can_be_in_loop = True
 		end_with_nan = False
 		for ke,epoch in enumerate(range(0, self.epochs_max+1)): # for epochs
-			model_kwargs.update({'epoch':epoch})
+			training_kwargs.update({'__epoch__':epoch})
 			try:
 				if can_be_in_loop:
 					#with torch.autograd.detect_anomaly(): # really useful but slow af
@@ -191,9 +191,9 @@ class ModelTrainHandler(object):
 							lmonitor.optimizer.zero_grad() # set gradient to 0
 
 							#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
-							out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **model_kwargs) # Feed forward
+							out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs) # Feed forward
 							#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
-							loss = lmonitor.loss(out_tdict)
+							loss = lmonitor.loss(out_tdict, **training_kwargs)
 							loss.get_loss(numpy=False).backward() # gradient calculation
 							lmonitor.optimizer.step() # step gradient
 
@@ -215,12 +215,12 @@ class ModelTrainHandler(object):
 						lmonitor.add_opt_history_epoch()
 
 					### evaluation in sets
-					text, evaluated = self.evaluate_in_set('train', train_loader, model_kwargs)
+					text, evaluated = self.evaluate_in_set('train', train_loader, training_kwargs)
 					if evaluated:
 						bar_text_dic['eval-train'] = text
 						self.update_bar(training_bar, bar_text_dic)
 
-					text, evaluated = self.evaluate_in_set('val', val_loader, model_kwargs)
+					text, evaluated = self.evaluate_in_set('val', val_loader, training_kwargs)
 					if evaluated:
 						bar_text_dic['eval-val'] = text
 						self.update_bar(training_bar, bar_text_dic)

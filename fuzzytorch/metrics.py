@@ -10,14 +10,15 @@ import pandas as pd
 ###################################################################################################################################################
 
 class MetricResult():
-	def __init__(self, batch_metric,
+	def __init__(self, batch_metric_,
 		reduction_mode='mean',
 		):
-		assert len(batch_metric.shape)==1
-		self.original_len = len(batch_metric)
+		assert len(batch_metric_.shape)==1
+		self.batch_metric_ = batch_metric_
+		self.len_ = len(self.batch_metric_)
 		self.reduction_mode = reduction_mode
 		if self.reduction_mode=='mean':
-			self.batch_metric = batch_metric.mean()[None]
+			self.batch_metric = self.batch_metric_.mean()[None]
 
 	def get_metric(self,
 		numpy=True,
@@ -25,7 +26,7 @@ class MetricResult():
 		return self.batch_metric.item() if numpy else self.batch_metric
 
 	def __len__(self):
-		return self.original_len
+		return self.len_
 
 	def __repr__(self):
 		return f'{xstr(self.get_metric())}'
@@ -72,7 +73,7 @@ class DummyAccuracy(FTMetric):
 
 class OnehotAccuracy(FTMetric):
 	def __init__(self, name,
-		target_is_onehot:bool=True,
+		target_is_onehot:bool=False,
 		**kwargs):
 		self.name = name
 		self.target_is_onehot = target_is_onehot
@@ -92,7 +93,7 @@ class OnehotAccuracy(FTMetric):
 
 class OnehotAccuracy(FTMetric):
 	def __init__(self, name,
-		target_is_onehot:bool=True,
+		target_is_onehot:bool=False,
 		**kwargs):
 		self.name = name
 		self.target_is_onehot = target_is_onehot
