@@ -89,14 +89,16 @@ class LossResult():
 	def __repr__(self):
 		lv = f'{xstr(self.get_loss())}'
 		batch_sublosses = list(self.batch_sublosses.keys())
-		slv = '/'.join([xstr(self.get_subloss(batch_subloss)) for batch_subloss in batch_sublosses])
-		slvn = '/'.join([batch_subloss for batch_subloss in batch_sublosses])
-		return f'{lv}={slv}({slvn})' if len(batch_sublosses)>0 else f'{lv}'
+		if len(batch_sublosses)==0: 
+			return f'{lv}'
+		else:
+			txt = '/'.join([f'{batch_subloss}={xstr(self.get_subloss(batch_subloss))}' for batch_subloss in batch_sublosses])
+			return f'{lv}({txt})'
 
 	def __add__(self, other):
-		if other==0:
+		if other==0 or other is None:
 			return self
-		elif self==0:
+		elif self==0 or self is None:
 			return other
 		else:
 			loss = LossResult(self.batch_loss+other.batch_loss)

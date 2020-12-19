@@ -34,8 +34,9 @@ class LossMonitor(object):
 
 		### CHECKS
 		assert isinstance(loss, ft_losses.FTLoss)
-		metrics = [metrics] if isinstance(metric, ft_metrics.FTMetric) else metrics
+		metrics = [metrics] if isinstance(metrics, ft_metrics.FTMetric) else metrics
 		assert isinstance(metrics, list) and all([isinstance(metric, ft_metrics.FTMetric) for metric in metrics])
+		assert len([metric.name for metric in metrics])==len(set([metric.name for metric in metrics]))
 		assert isinstance(optimizer, ft_optimizers.LossOptimizer)
 
 		self.loss = loss
@@ -216,20 +217,19 @@ class LossMonitor(object):
 				return False
 
 		elif self.save_mode==C_.SM_ONLY_INF_METRIC:
-			assert 0
-			'''
-			metric_evolution = np.array(self.history_dict['metrics_evolution_epochcheck'][set_name][self.target_metric_crit])
+			metric_evolution = self.metrics_df_epoch[self.target_metric_crit][self.metrics_df_epoch['__set__'].isin([set_name])].values
 			if len(metric_evolution)<=1:
 				return True # always save first and dont delete anything
 
-			actual_metric = metric_evolution[-1]
-			metric_history = metric_evolution[:-1]
+			metric_history = metric_evolution[:-1] # history
+			actual_metric = metric_evolution[-1] # last one
 
 			if actual_metric<np.min(metric_history): # must save and delete
 				self.remove_filedir(self.last_saved_filedir) # remove last best model
 				return True
-			return False
-			'''
+			else:
+				return False
+
 		elif self.save_mode==C_.SM_ONLY_SUP_METRIC:
 			metric_evolution = self.metrics_df_epoch[self.target_metric_crit][self.metrics_df_epoch['__set__'].isin([set_name])].values
 			if len(metric_evolution)<=1:
