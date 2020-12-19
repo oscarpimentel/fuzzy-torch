@@ -83,7 +83,7 @@ class CNN2DClassifier(nn.Module):
 			'mdl':'cnn2d',
 			'dropout':self.dropout,
 			'output_dims':self.output_dims,
-			'cnn_features':'-'.join([str(cnnf) for cnnf in self.cnn_features]),
+			'cnn_features':'.'.join([str(cnnf) for cnnf in self.cnn_features]),
 		})
 
 	def build_mlp_classifier(self):

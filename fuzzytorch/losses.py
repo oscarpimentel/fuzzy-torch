@@ -123,7 +123,7 @@ class LossResult():
 
 ###################################################################################################################################################
 
-class FTLoss():
+class FTLoss(): # used for heritage
 	def __init__(self, name, **kwargs):
 		self.name = name
 		for key in kwargs.keys():
@@ -133,7 +133,7 @@ class XEntropy(FTLoss):
 	def __init__(self, name,
 			model_output_is_with_softmax:bool=False,
 			target_is_onehot:bool=False,
-			):
+			**kwargs):
 		self.name = name
 		self.model_output_is_with_softmax = model_output_is_with_softmax
 		self.target_is_onehot = target_is_onehot
@@ -144,6 +144,6 @@ class XEntropy(FTLoss):
 		
 		batch_loss = batch_xentropy(y_pred, y_target, self.model_output_is_with_softmax, self.target_is_onehot) # (b,c) > (b)
 		loss_res = LossResult(batch_loss)
-		loss_res.add_subloss('loss/2', batch_loss/2)
-		loss_res.add_subloss('loss/3', batch_loss/3)
+		loss_res.add_subloss('loss*2', batch_loss*2)
+		loss_res.add_subloss('loss*3', batch_loss*3)
 		return loss_res
