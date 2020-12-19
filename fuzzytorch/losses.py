@@ -138,14 +138,10 @@ class XEntropy(FTLoss):
 		self.model_output_is_with_softmax = model_output_is_with_softmax
 		self.target_is_onehot = target_is_onehot
 
-	def __call__(self, tensor_dict,
+	def __call__(self, tdict,
 		**kwargs):
-		input_tdict = tdict['input']
-		target_tdict = tdict['target']
-		model_tdict = tdict['model']
-
-		y_pred = tensor_dict['output']['y']
-		y_target = tensor_dict['target']['y']
+		y_pred = tdict['model']['y']
+		y_target = tdict['target']['y']
 		
 		batch_loss = batch_xentropy(y_pred, y_target, self.model_output_is_with_softmax, self.target_is_onehot) # (b,c) > (b)
 		loss_res = LossResult(batch_loss)

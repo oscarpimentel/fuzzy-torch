@@ -64,9 +64,9 @@ class DummyAccuracy(FTMetric):
 		**kwargs):
 		self.name = name
 
-	def __call__(self, tensor_dict):
-		y_target = tensor_dict['target']['y']
-		y_pred = tensor_dict['model']['y']
+	def __call__(self, tdict):
+		y_target = tdict['target']['y']
+		y_pred = tdict['model']['y']
 
 		m = torch.ones((len(y_pred)))/y_pred.shape[-1]*100
 		return MetricResult(m)
@@ -78,9 +78,9 @@ class OnehotAccuracy(FTMetric):
 		self.name = name
 		self.target_is_onehot = target_is_onehot
 
-	def __call__(self, tensor_dict):
-		y_target = tensor_dict['target']['y']
-		y_pred = tensor_dict['model']['y']
+	def __call__(self, tdict):
+		y_target = tdict['target']['y']
+		y_pred = tdict['model']['y']
 		
 		if self.target_is_onehot:
 			assert y_pred.size==y_target.size
@@ -98,9 +98,9 @@ class OnehotAccuracy(FTMetric):
 		self.name = name
 		self.target_is_onehot = target_is_onehot
 
-	def __call__(self, tensor_dict):
-		y_target = tensor_dict['target']['y']
-		y_pred = tensor_dict['model']['y']
+	def __call__(self, tdict):
+		y_target = tdict['target']['y']
+		y_pred = tdict['model']['y']
 		
 		if self.target_is_onehot:
 			assert y_pred.size==y_target.size
