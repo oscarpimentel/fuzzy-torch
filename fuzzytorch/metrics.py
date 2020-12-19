@@ -64,8 +64,9 @@ class DummyAccuracy(FTMetric):
 		self.name = name
 
 	def __call__(self, tensor_dict):
-		y_pred = tensor_dict['output']['y']
 		y_target = tensor_dict['target']['y']
+		y_pred = tensor_dict['model']['y']
+
 		m = torch.ones((len(y_pred)))/y_pred.shape[-1]*100
 		return MetricResult(m)
 
@@ -77,8 +78,8 @@ class OnehotAccuracy(FTMetric):
 		self.target_is_onehot = target_is_onehot
 
 	def __call__(self, tensor_dict):
-		y_pred = tensor_dict['output']['y']
 		y_target = tensor_dict['target']['y']
+		y_pred = tensor_dict['model']['y']
 		
 		if self.target_is_onehot:
 			assert y_pred.size==y_target.size
@@ -86,5 +87,25 @@ class OnehotAccuracy(FTMetric):
 		
 		y_pred = y_pred.argmax(dim=-1)
 		assert y_pred.shape==y_target.shape
-		accuracies = (y_pred==y_target).float()
-		return MetricResult(accuracies*100)
+		accuracies = (y_pred==y_target).float()*100
+		return MetricResult(accuracies)
+
+class OnehotAccuracy(FTMetric):
+	def __init__(self, name,
+		target_is_onehot:bool=True,
+		**kwargs):
+		self.name = name
+		self.target_is_onehot = target_is_onehot
+
+	def __call__(self, tensor_dict):
+		y_target = tensor_dict['target']['y']
+		y_pred = tensor_dict['model']['y']
+		
+		if self.target_is_onehot:
+			assert y_pred.size==y_target.size
+			y_target = y_target.argmax(dim=-1)
+		
+		y_pred = y_pred.argmax(dim=-1)
+		assert y_pred.shape==y_target.shape
+		accuracies = (y_pred==y_target).float()*100
+		return MetricResult(accuracies)

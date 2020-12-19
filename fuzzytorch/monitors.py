@@ -201,42 +201,43 @@ class LossMonitor(object):
 			return True
 
 		elif self.save_mode==C_.SM_ONLY_INF_LOSS:
-			assert 0
-			loss_evolution = np.array(self.history_dict['finalloss_evolution_epochcheck'][set_name])
+			loss_evolution = self.loss_df_epoch['__loss__'][self.loss_df_epoch['__set__'].isin([set_name])].values
 			if len(loss_evolution)<=1:
 				return True # always save first and dont delete anything
 
-			actual_loss = loss_evolution[-1]
-			loss_history = loss_evolution[:-1]
-			#print(actual_loss<np.min(loss_history), actual_loss, loss_history,np.min(loss_history))
+			loss_history = loss_evolution[:-1] # history
+			actual_loss = loss_evolution[-1] # last one
+
 			if actual_loss<np.min(loss_history): # must save and delete
 				self.remove_filedir(self.last_saved_filedir) # remove last best model
 				return True
-			return False
+			else:
+				return False
 
 		elif self.save_mode==C_.SM_ONLY_INF_METRIC:
 			assert 0
+			'''
 			metric_evolution = np.array(self.history_dict['metrics_evolution_epochcheck'][set_name][self.target_metric_crit])
 			if len(metric_evolution)<=1:
 				return True # always save first and dont delete anything
 
-			actual_metric_val = metric_evolution[-1]
+			actual_metric = metric_evolution[-1]
 			metric_history = metric_evolution[:-1]
 
-			if actual_metric_val<np.min(metric_history): # must save and delete
+			if actual_metric<np.min(metric_history): # must save and delete
 				self.remove_filedir(self.last_saved_filedir) # remove last best model
 				return True
 			return False
-		
+			'''
 		elif self.save_mode==C_.SM_ONLY_SUP_METRIC:
 			metric_evolution = self.metrics_df_epoch[self.target_metric_crit][self.metrics_df_epoch['__set__'].isin([set_name])].values
 			if len(metric_evolution)<=1:
 				return True # always save first and dont delete anything
 
 			metric_history = metric_evolution[:-1] # history
-			actual_metric_val = metric_evolution[-1] # last one
+			actual_metric = metric_evolution[-1] # last one
 
-			if actual_metric_val>np.max(metric_history): # must save and delete
+			if actual_metric>np.max(metric_history): # must save and delete
 				self.remove_filedir(self.last_saved_filedir) # remove last best model
 				return True
 			else:

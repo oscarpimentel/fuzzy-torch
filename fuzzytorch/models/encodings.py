@@ -49,7 +49,7 @@ class FILM(nn.Module):
 			x = self.in_dropout_f(x)
 			x = x*mod[0]+mod[1]
 			x = self.out_dropout_f(x)
-		return x 
+		return x
 
 	def __len__(self):
 		return utils.count_parameters(self)

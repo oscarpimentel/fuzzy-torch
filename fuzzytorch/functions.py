@@ -7,10 +7,37 @@ import numpy as np
 
 ###################################################################################################################################################
 
-def get_last_element(x, onehot):
+def seq_clean(x, onehot):
 	'''
-	x = (b,t,f)
-	onehot = (b,t)
+	x (b,t,f)
+	onehot (b,t)
+	'''
+	assert onehot.dtype==torch.bool
+	assert len(onehot.shape)==2
+	assert x.shape[:-1]==onehot.shape
+	assert len(x.shape)==3
+
+	x = x.masked_fill(~onehot[...,None], 0) # clean using onehot
+	return x
+
+def seq_mean(x, onehot):
+	'''
+	x (b,t,f)
+	onehot (b,t)
+	'''
+	assert onehot.dtype==torch.bool
+	assert len(onehot.shape)==2
+	assert x.shape[:-1]==onehot.shape
+	assert len(x.shape)==3
+
+	x = seq_clean(x, onehot)
+	x = x.sum(dim=1)/(onehot.sum(dim=1)[...,None]+C_.EPS) # (b,t,f) > (b,f)
+	return x
+
+def seq_last_element(x, onehot):
+	'''
+	x (b,t,f)
+	onehot (b,t)
 	'''
 	assert onehot.dtype==torch.bool
 	assert len(onehot.shape)==2
@@ -24,10 +51,10 @@ def get_last_element(x, onehot):
 	last_x = last_x[:,0,:]
 	return last_x
 
-def get_max_element(x, onehot):
+def seq_max_element(x, onehot):
 	'''
-	x = (b,t,f)
-	onehot = (b,t)
+	x (b,t,f)
+	onehot (b,t)
 	'''
 	assert onehot.dtype==torch.bool
 	assert len(onehot.shape)==2

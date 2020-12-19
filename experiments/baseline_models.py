@@ -42,7 +42,7 @@ class MLPClassifier(nn.Module):
 		x = tdict['input']['x']
 		x = x.view(x.shape[0],-1) # flatten
 		x = self.classifier(x)
-		tdict['output'] = {'y':x}
+		tdict['model'] = {'y':x}
 		return tdict
 
 class CNN2DClassifier(nn.Module):
@@ -110,7 +110,7 @@ class CNN2DClassifier(nn.Module):
 		x = tdict['input']['x']
 		x = self.ml_cnn2d(x)
 		x = self.forward_mlp_classifier(x) if self.uses_mlp_classifier else self.forward_custom_classifier(x)
-		tdict['output'] = {'y':x}
+		tdict['model'] = {'y':x}
 		return tdict
 
 	def forward_mlp_classifier(self, x):

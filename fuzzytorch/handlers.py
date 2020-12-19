@@ -109,8 +109,10 @@ class ModelTrainHandler(object):
 					if self.uses_train_eval_loader_methods:
 						set_loader.eval() # dataset eval mode!
 					self.model.eval() # model eval mode!
-					for k,in_tdict in enumerate(set_loader): # batches loop
+					for ki,in_tdict in enumerate(set_loader): # batches loop
+						#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
 						out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **model_kwargs)
+						#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
 						set_loss.append(lmonitor.loss(out_tdict))
 						for metric in lmonitor.metrics:
 							set_metrics_dict[metric.name].append(metric(out_tdict))
@@ -188,8 +190,9 @@ class ModelTrainHandler(object):
 							lmonitor.train() # model train mode!
 							lmonitor.optimizer.zero_grad() # set gradient to 0
 
-							#print(TDictHolder(in_tdict))
+							#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
 							out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **model_kwargs) # Feed forward
+							#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
 							loss = lmonitor.loss(out_tdict)
 							loss.get_loss(numpy=False).backward() # gradient calculation
 							lmonitor.optimizer.step() # step gradient
@@ -199,7 +202,7 @@ class ModelTrainHandler(object):
 							losses_text_list.append(f'[{lmonitor.name}] __loss__: {str(loss)} {lmonitor_cr}')
 							lmonitor.k_update() # update k
 
-						if ki>6:
+						if ki>0:
 							#break # debug
 							pass
 						

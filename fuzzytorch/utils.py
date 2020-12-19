@@ -22,13 +22,16 @@ def tdict_to_device(d, device):
 
 def get_tdict_repr(d):
 	if isinstance(d, dict):
-		return '{'+', '.join([f'{k}{get_tdict_repr(d[k])}' for k in d.keys()])+'}'
+		return '{'+', '.join([f'{k}: {get_tdict_repr(d[k])}' for k in d.keys()])+'}'
 	elif isinstance(d, torch.Tensor):
 		x = d
 		shape_txt = '' if len(x.shape)==0 else ', '.join([str(i) for i in x.shape])
 		return f'({shape_txt})-{str(x.dtype)[6:]}-{x.device}'
 	else:
 		return ''
+
+def print_tdict(d):
+	print(get_tdict_repr(d))
 
 ###################################################################################################################################################
 

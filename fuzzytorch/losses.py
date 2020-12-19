@@ -137,6 +137,10 @@ class CrossEntropy(FTLoss):
 
 	def __call__(self, tensor_dict,
 		**kwargs):
+		input_tdict = tdict['input']
+		target_tdict = tdict['target']
+		model_tdict = tdict['model']
+
 		y_pred = tensor_dict['output']['y']
 		y_target = tensor_dict['target']['y']
 		
