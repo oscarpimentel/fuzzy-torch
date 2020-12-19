@@ -78,6 +78,10 @@ class MyDataset(Dataset):
 		x = self.apply_da(x) # (c,h,w)
 		y = self.y[idx] # (N) > ()
 		return {
-			'input':{'x':x, 'x2':x[0][0]},
-			'target':{'y':y, 'y2':y[None],},
+			'input':{
+				'x':x,
+			},
+			'target':{
+				'y':y,
+			},
 			}
