@@ -78,7 +78,7 @@ class OnehotAccuracy(FTMetric):
 		self.name = name
 		self.target_is_onehot = target_is_onehot
 
-	def __call__(self, tdict):
+	def __call__(self, tdict, **kwargs):
 		y_target = tdict['target']['y']
 		y_pred = tdict['model']['y']
 		
@@ -98,7 +98,7 @@ class OnehotAccuracy(FTMetric):
 		self.name = name
 		self.target_is_onehot = target_is_onehot
 
-	def __call__(self, tdict):
+	def __call__(self, tdict, **kwargs):
 		y_target = tdict['target']['y']
 		y_pred = tdict['model']['y']
 		

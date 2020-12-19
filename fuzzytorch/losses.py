@@ -92,7 +92,7 @@ class LossResult():
 		if len(batch_sublosses)==0: 
 			return f'{lv}'
 		else:
-			txt = '/'.join([f'{batch_subloss}={xstr(self.get_subloss(batch_subloss))}' for batch_subloss in batch_sublosses])
+			txt = '|'.join([f'{batch_subloss}={xstr(self.get_subloss(batch_subloss))}' for batch_subloss in batch_sublosses])
 			return f'{lv}({txt})'
 
 	def __add__(self, other):
@@ -138,8 +138,7 @@ class XEntropy(FTLoss):
 		self.model_output_is_with_softmax = model_output_is_with_softmax
 		self.target_is_onehot = target_is_onehot
 
-	def __call__(self, tdict,
-		**kwargs):
+	def __call__(self, tdict, **kwargs):
 		y_pred = tdict['model']['y']
 		y_target = tdict['target']['y']
 		
