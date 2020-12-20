@@ -53,6 +53,19 @@ class MetricResult():
 
 ###################################################################################################################################################
 
+def get_labels_accuracy(y_pred, y_target, labels):
+	labels_accuracies = []
+	for k in range(labels):
+		valid_idxs = torch.where(y_target==k)
+		y_pred_k = y_pred[valid_idxs]
+		y_target_k = y_target[valid_idxs]
+		accuracies = (y_target_k==y_pred_k).float()*100
+		if len(valid_idxs[0])>0:
+			labels_accuracies.append(torch.mean(accuracies)[None])
+	return torch.cat(labels_accuracies)
+
+###################################################################################################################################################
+
 class FTMetric(): # used for heritage
 	def __init__(self, name, **kwargs):
 		self.name = name
@@ -64,28 +77,38 @@ class DummyAccuracy(FTMetric):
 		self.name = name
 
 	def __call__(self, tdict, **kwargs):
+		epoch = kwargs['__epoch__']
 		y_target = tdict['target']['y']
 		y_pred = tdict['model']['y']
 
 		m = torch.ones((len(y_pred)))/y_pred.shape[-1]*100
 		return MetricResult(m)
 
-class OnehotAccuracy(FTMetric):
+class Accuracy(FTMetric):
 	def __init__(self, name,
 		target_is_onehot:bool=False,
+		balanced=False,
 		**kwargs):
 		self.name = name
 		self.target_is_onehot = target_is_onehot
+		self.balanced = balanced
 
 	def __call__(self, tdict, **kwargs):
+		epoch = kwargs['__epoch__']
 		y_target = tdict['target']['y']
 		y_pred = tdict['model']['y']
-		
+		labels = y_pred.shape[-1]
+
+		assert y_target.dtype==torch.long
+
 		if self.target_is_onehot:
-			assert y_pred.size==y_target.size
+			assert y_pred.shape==y_target.shape
 			y_target = y_target.argmax(dim=-1)
 		
 		y_pred = y_pred.argmax(dim=-1)
 		assert y_pred.shape==y_target.shape
-		accuracies = (y_pred==y_target).float()*100
+		assert len(y_pred.shape)==1
+
+		accuracies = get_labels_accuracy(y_pred, y_target, labels) if self.balanced else torch.mean((y_pred==y_target).float()*100)[None]
+		#print(accuracies.shape)
 		return MetricResult(accuracies)

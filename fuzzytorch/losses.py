@@ -139,6 +139,7 @@ class XEntropy(FTLoss):
 		self.target_is_onehot = target_is_onehot
 
 	def __call__(self, tdict, **kwargs):
+		epoch = kwargs['__epoch__']
 		y_pred = tdict['model']['y']
 		y_target = tdict['target']['y']
 		
