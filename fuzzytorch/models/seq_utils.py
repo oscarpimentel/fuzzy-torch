@@ -7,6 +7,18 @@ import numpy as np
 
 ###################################################################################################################################################
 
+def mapping(source, indexs, output,
+	dim=1,
+	):
+	fixed_indexs = indexs.clone()
+	IMD = source.shape[1]
+	fixed_indexs[fixed_indexs==IMD] = output.shape[dim]-1
+	fixed_indexs = fixed_indexs.unsqueeze(-1).expand(-1,-1,source.shape[-1])
+	#print(output.device, fixed_indexs.device, source.device)
+	output.scatter_(dim, fixed_indexs, source)
+
+###################################################################################################################################################
+
 def seq_clean(x, onehot):
 	'''
 	x (b,t,f)
@@ -68,38 +80,33 @@ def seq_max_element(x, onehot):
 	x,_ = torch.max(x, dim=1)
 	return x
 
-###################################################################################################################################################
-
-def generate_tensor_mask(start_index, curve_lengths, max_curve_lengths, device):
-	return generate_tensor_mask_start_index_len(start_index, curve_lengths, max_curve_lengths, device)
-	#return generate_tensor_mask_start_index_len(curve_lengths, max_curve_lengths, device)
-
-def generate_tensor_mask_length(curve_lengths, max_curve_lengths,
+def get_seq_onehot_mask(seqlengths, max_seqlength,
 	device=None,
 	):
-	'''
-	5: 1 1 1 1 1 0 0 0...
-	'''
-	batch_size = len(curve_lengths)
-	mask = torch.arange(max_curve_lengths).expand(batch_size, max_curve_lengths).to(curve_lengths.device if device is None else device)
-	mask = (mask < curve_lengths[...,None])
-	return mask.bool()
+	assert len(seqlengths.shape)==1
+	assert seqlengths.dtype==torch.long
 
+	batch_size = len(seqlengths)
+	mask = torch.arange(max_seqlength).expand(batch_size, max_seqlength).to(seqlengths.device if device is None else device)
+	mask = (mask < seqlengths[...,None])
+	return mask.bool() # (b,t,f)
 
-def generate_tensor_mask_start_index_length(start_index, curve_lengths, max_curve_lengths, device):
+def serial_to_parallel(x, onehot,
+	fill_value=0,
+	):
 	'''
-	2,5: 0 0 1 1 1 0 0 0...
+	x (b,t,f)
+	onehot (b,t)
 	'''
-	batch_size = len(curve_lengths)
-	mask = torch.arange(max_curve_lengths).expand(batch_size, max_curve_lengths).to(device)
-	mask = (mask < curve_lengths[...,None])&(mask > (start_index-1)[...,None])
-	return mask.bool()
+	assert onehot.dtype==torch.bool
+	assert len(onehot.shape)==2
+	assert x.shape[:-1]==onehot.shape
+	assert len(x.shape)==3
 
-def generate_tensor_mask_laststep(curve_lengths, max_curve_lengths, device):
-	'''
-	5: 0 0 0 0 1 0 0 0...
-	'''
-	batch_size = len(curve_lengths)
-	mask = torch.arange(max_curve_lengths).expand(batch_size, max_curve_lengths).to(device)
-	mask = (mask == (curve_lengths-1)[...,None])
-	return mask.bool()
+	IMD = onehot.shape[1]
+	s2p_mapping_indexs = (torch.cumsum(onehot, 1)-1).masked_fill(~onehot, IMD)
+	#print('s2p_mapping_indexs', s2p_mapping_indexs.shape, s2p_mapping_indexs)
+	new_shape = (x.shape[0], x.shape[1]+1, x.shape[2])
+	new_x = torch.full(new_shape, fill_value, device=x.device, dtype=x.dtype)
+	mapping(x, s2p_mapping_indexs, new_x)
+	return new_x[:,:-1,:]
