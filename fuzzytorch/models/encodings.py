@@ -20,6 +20,9 @@ class FILM(nn.Module):
 		super().__init__()
 
 		### CHECKS
+		assert in_dropout>=0 and in_dropout<=1
+		assert out_dropout>=0 and out_dropout<=1
+
 		self.mod_input_dims = mod_input_dims
 		self.mod_output_dims = mod_output_dims
 		self.in_dropout = in_dropout
@@ -42,12 +45,11 @@ class FILM(nn.Module):
 		# x (b,t,fx)
 		# mod (b,t,fm)
 		assert x.shape[-1]==self.mod_output_dims
-		assert in_dropout>=0 and in_dropout<=1
-		assert out_dropout>=0 and out_dropout<=1
 
 		if not self.is_dummy:
 			x = self.in_dropout_f(x)
-			x = x*mod[0]+mod[1]
+			gamma, beta = self.mod_f(mod)
+			x = x*gamma+beta
 			x = self.out_dropout_f(x)
 		return x
 
