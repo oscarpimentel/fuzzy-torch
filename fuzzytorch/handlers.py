@@ -95,11 +95,18 @@ class ModelTrainHandler(object):
 
 	def evaluate_in_set(self, set_name:str, set_loader, training_kwargs:dict,
 		):
+		self.model.eval() # model eval mode!
+		if self.uses_train_eval_loader_methods:
+			set_loader.eval() # dataset eval mode!
+		
 		text = None
 		evaluated = False
 		with torch.no_grad():
 			for lmonitor in self.lmonitors:
 				lmonitor_cr = times.Cronometer()
+				for lmonitor_aux in self.lmonitors:
+					lmonitor_aux.eval() # just in case
+
 				if lmonitor.needs_evaluation():
 					if text is None:
 						text = f'[{set_name}]'
@@ -107,9 +114,6 @@ class ModelTrainHandler(object):
 					evaluated = True
 					set_loss = []
 					set_metrics_dict = {mn:[] for mn in lmonitor.get_metric_names()}
-					if self.uses_train_eval_loader_methods:
-						set_loader.eval() # dataset eval mode!
-					self.model.eval() # model eval mode!
 					for ki,in_tdict in enumerate(set_loader): # batches loop
 						#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
 						out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs)
@@ -200,7 +204,7 @@ class ModelTrainHandler(object):
 
 							### save loss to history & bar text
 							lmonitor.add_loss_history_k(loss, lmonitor_cr.dt())
-							losses_text_list.append(f'[{lmonitor.name}] __loss__: {str(loss)} {lmonitor_cr}')
+							losses_text_list.append(f'[{lmonitor.name}] b: {len(loss):,} - __loss__: {str(loss)} {lmonitor_cr}')
 							lmonitor.k_update() # update k
 
 						if ki>0:
