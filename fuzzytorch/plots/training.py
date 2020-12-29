@@ -14,7 +14,7 @@ from flamingchoripan.cuteplots.utils import save_fig
 def plot_loss(train_handler,
 	sigma:float=4,
 
-	save_dir:str=None,
+	save_rootdir:str=None,
 	fig=None,
 	ax=None,
 	figsize:tuple=C_.PLOT_FIGSIZE,
@@ -48,13 +48,13 @@ def plot_loss(train_handler,
 	ax.set_ylim(ylim)
 	ax.legend()
 	ax.grid(alpha=C_.PLOT_GRID_ALPHA)
-
-	title = f'model: {train_handler.model.get_name()} - id: {train_handler.id}' 
+	complete_save_roodir = train_handler.complete_save_roodir.split('/')[-1] # train_handler.get_complete_save_roodir().split('/')[-1]
+	title = f'model: {complete_save_roodir} - id: {train_handler.id}' 
 	ax.set_title(title)
 
-	if not save_dir is None:
-		new_save_dir = f'{save_dir}/{train_handler.model_name}'
-		filedir = f'{new_save_dir}/plot-trainloss_id-{train_handler.id}.png'
+	if not save_rootdir is None:
+		new_save_dir = f'{save_rootdir}/{complete_save_roodir}'
+		filedir = f'{new_save_dir}/plot{C_.KEY_VALUE_SEP_CHAR}trainloss{C_.KEY_KEY_SEP_CHAR}id{C_.KEY_VALUE_SEP_CHAR}{train_handler.id}.png'
 		save_fig(filedir, fig)
 
 	return fig, ax
