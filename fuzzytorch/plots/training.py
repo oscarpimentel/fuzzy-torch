@@ -3,28 +3,18 @@ from __future__ import division
 from . import C_
 
 import numpy as np
-import matplotlib.pyplot as plt # plots
+import matplotlib.pyplot as plt
 from matplotlib.pyplot import cm
-from ..cutePlots import colors as cpc
+import flamingchoripan.cuteplots.colors as cc
 from scipy.ndimage import gaussian_filter1d
-from ..myUtils import files as files
+from flamingchoripan.cuteplots.utils import save_fig
 
-def get_title(train_handler, title):
-	if not title is None:
-		return title
+###################################################################################################################################################
 
-	conv_time = train_handler.train_handlers[0].get_mins_to_convergence()
-	new_title = f'model: {train_handler.model_name} - id: {train_handler.id} - conv-time: {conv_time:.2f}[mins]' 
-	return new_title
-
-def get_train_style(is_train):
-	return '--' if is_train else '-'
-
-def plot_trainloss(train_handler,
+def plot_loss(train_handler,
 	sigma:float=4,
 
 	save_dir:str=None,
-	title=None,
 	fig=None,
 	ax=None,
 	figsize:tuple=C_.PLOT_FIGSIZE,
@@ -33,38 +23,39 @@ def plot_trainloss(train_handler,
 	xlim:tuple=(1,None),
 	ylim:tuple=(None,None),
 	verbose:int=0,
-	plot_k_every:int=1,
 	**kwargs):
 
-	fig, ax = (plt.subplots(1,1, figsize=figsize, dpi=C_.PLOT_DPI) if fig is None else (fig, ax))
-	for trainh in train_handler.train_handlers:
-		loss = trainh.history_dict['finalloss_evolution_k']['train'][::plot_k_every]
-		sublosses = trainh.history_dict['sublosses_evolution_k']['train']
-		cmap = (cpc.get_default_cmap(len(sublosses.keys())) if cmap is None else cmap)
+	fig, ax = plt.subplots(1,1, figsize=figsize, dpi=C_.PLOT_DPI) if fig is None else (fig, ax)
+	for lmonitor in train_handler.lmonitors:
+		loss = lmonitor.loss_df['__loss__']
+		sublosses_names = [c for c in lmonitor.loss_df.columns if c[:2]!='__']
+		sublosses = lmonitor.loss_df[sublosses_names]
+		cmap = cc.get_default_cmap(len(sublosses_names)) if cmap is None else cmap
 		colors = cmap.colors
 		iterations = np.arange(len(loss))+1
-		for k,key in enumerate(sublosses.keys()):
-			ax.plot(iterations, sublosses[key][::plot_k_every], c=colors[k], label=f'{key}', alpha=alpha)
+		for k,subloss_name in enumerate(sublosses_names):
+			ax.plot(iterations, sublosses[subloss_name], c=colors[k], label=f'{subloss_name}', alpha=alpha)
 
 		ax.plot(iterations, loss, c=C_.C_MAIN_LOSS, alpha=alpha, lw=1)
-		ax.plot(iterations, gaussian_filter1d(loss, sigma), label=f'{trainh.name}', c=C_.C_MAIN_LOSS) # gaussian fit for smooth
+		ax.plot(iterations, gaussian_filter1d(loss, sigma), c=C_.C_MAIN_LOSS, label=f'{lmonitor.name}') # gaussian fit for smooth
 		
-	best_epoch = trainh.history_dict['best_epoch']
-	best_iteration = best_epoch*trainh.history_dict['ks_epochs']/trainh.history_dict['k_every']
-	ax.axvline(x=best_iteration, c='k', label='best iteration', lw=1, alpha=1) # vertical line in best epoch
+	best_epoch = lmonitor.get_best_epoch()
+	#best_iteration = best_epoch*trainh.history_dict['ks_epochs']/trainh.history_dict['k_every']
+	#ax.axvline(x=best_iteration, c='k', label='best iteration', lw=1, alpha=1) # vertical line in best epoch
 	ax.set_xlabel('iterations')
 	ax.set_ylabel('loss')
 	ax.set_xlim(xlim)
 	ax.set_ylim(ylim)
 	ax.legend()
 	ax.grid(alpha=C_.PLOT_GRID_ALPHA)
-	ax.set_title(get_title(train_handler, title))
+
+	title = f'model: {train_handler.model.get_name()} - id: {train_handler.id}' 
+	ax.set_title(title)
 
 	if not save_dir is None:
 		new_save_dir = f'{save_dir}/{train_handler.model_name}'
-		files.create_dir(new_save_dir)
 		filedir = f'{new_save_dir}/plot-trainloss_id-{train_handler.id}.png'
-		plt.savefig(filedir)
+		save_fig(filedir, fig)
 
 	return fig, ax
 

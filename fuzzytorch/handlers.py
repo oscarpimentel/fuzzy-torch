@@ -32,11 +32,13 @@ class ModelTrainHandler(object):
 		### CHECKS
 		lmonitors = [lmonitors] if isinstance(lmonitors, mon.LossMonitor) else lmonitors
 		assert isinstance(lmonitors, list) and all([isinstance(lmonitor, mon.LossMonitor) for lmonitor in lmonitors])
+		assert isinstance(extra_model_name_dict, dict)
 
 		self.model = model
 		self.lmonitors = lmonitors
 		self.save_rootdir = save_rootdir
-		self.complete_save_roodir = f'{self.save_rootdir}/{self.model.get_name()}'+('' if len(extra_model_name_dict.keys())==0 else f'{C_.KEY_KEY_SEP_CHAR}{get_model_name(extra_model_name_dict)}')
+		self.extra_model_name_dict = extra_model_name_dict.copy()
+		self.complete_save_roodir = self.get_complete_save_roodir()
 		self.id = id
 		self.epochs_max = int(epochs_max)
 		self.uses_train_eval_loader_methods = uses_train_eval_loader_methods
@@ -44,6 +46,9 @@ class ModelTrainHandler(object):
 
 		self.device = 'cpu'
 		self.device_name = 'cpu'
+
+	def get_complete_save_roodir(self):
+		return f'{self.save_rootdir}/{self.model.get_name()}'+('' if len(self.extra_model_name_dict.keys())==0 else f'{C_.KEY_KEY_SEP_CHAR}{get_model_name(self.extra_model_name_dict)}')
 
 	def clean_cache(self):
 		if self.uses_gpu:
@@ -290,23 +295,22 @@ class ModelTrainHandler(object):
 		if not target_id==self.id:
 			self.id = target_id
 
-		complete_save_dir = f'{self.save_dir}/{self.model_name}'
-		filedirs = files.get_filedirs(complete_save_dir, fext=C_.SAVE_FEXT)
+		filedirs = files.get_filedirs(self.complete_save_roodir, fext=C_.SAVE_FEXT)
 		if len(filedirs)==0:
-			prints.print_red(f'*** no files in {complete_save_dir} ***')
+			prints.print_red(f'*** no files in {self.complete_save_roodir} ***')
 			return False
 
 		if target_epoch is None: # seach the last epoch with that id
 			filedics = [files.get_dict_from_filedir(filedir) for filedir in filedirs]
 			epochs = [int(filedic['epoch']) for filedic in filedics if int(filedic['id'])==target_id]
 			if len(epochs)==0:
-				prints.print_red(f'*** no files with id {target_id} in {complete_save_dir} ***')
+				prints.print_red(f'*** no files with id {target_id} in {self.complete_save_roodir} ***')
 				return False
 
 			epochs = sorted(epochs)
 			target_epoch = epochs[-1]
 
-		to_load_filedir = f'{complete_save_dir}/id{C_.KEY_VALUE_SEP_CHAR}{target_id}{C_.KEY_KEY_SEP_CHAT}epoch{C_.KEY_VALUE_SEP_CHAR}{target_epoch}.{C_.SAVE_FEXT}'
+		to_load_filedir = f'{self.complete_save_roodir}/id{C_.KEY_VALUE_SEP_CHAR}{target_id}{C_.KEY_KEY_SEP_CHAR}epoch{C_.KEY_VALUE_SEP_CHAR}{target_epoch}.{C_.SAVE_FEXT}'
 		prints.print_blue(f'> loading model: {to_load_filedir}')
 
 		if map_location is None: # is GPU
@@ -314,10 +318,9 @@ class ModelTrainHandler(object):
 		else:
 			loaded_dic = torch.load(to_load_filedir, map_location='cpu')
 
+		self.model.load_state_dict(loaded_dic['state_dict'])
 		for lmonitor in self.lmonitors:
-			lmonitor.history_dict = loaded_dic['lmonitors'][lmonitor.name]
-			lmonitor.model.load_state_dict(loaded_dic['state_dict'][lmonitor.name])
+			#lmonitor.history_dict = loaded_dic['lmonitors'][lmonitor.name]
+			pass
 			
 		return True
-
-

@@ -4,6 +4,7 @@ from . import C_
 
 import torch
 import flamingchoripan.strings as strings
+from torch.utils.data._utils.collate import default_collate
 
 ###################################################################################################################################################
 
@@ -40,9 +41,11 @@ class TDictHolder():
 		assert isinstance(d, dict)
 		self.d = d
 
-	def to(self, device):
+	def to(self, device,
+		add_dummy_dim=False,
+		):
 		tdict_to_device(self.d, device)
-		return self.d
+		return default_collate([self.d]) if add_dummy_dim else self.d
 
 	def __getitem__(self, key):
 		return self.d[key]
