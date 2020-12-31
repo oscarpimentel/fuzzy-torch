@@ -32,7 +32,7 @@ def seq_clean(x, onehot):
 	x = x.masked_fill(~onehot[...,None], 0) # clean using onehot
 	return x
 
-def seq_mean(x, onehot):
+def seq_mean_pooling(x, onehot):
 	'''
 	x (b,t,f)
 	onehot (b,t)
@@ -63,7 +63,7 @@ def seq_last_element(x, onehot):
 	last_x = last_x[:,0,:]
 	return last_x
 
-def seq_max_element(x, onehot):
+def seq_max_pooling(x, onehot):
 	'''
 	x (b,t,f)
 	onehot (b,t)
@@ -76,7 +76,8 @@ def seq_max_element(x, onehot):
 	b,t,f = x.size()
 	new_onehot = onehot.clone()
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
-	x = x.masked_fill(~new_onehot[...,None], -1/C_.EPS) # clean using onehot
+	infty = 1/C_.EPS
+	x = x.masked_fill(~new_onehot[...,None], -infty) # clean using onehot
 	x,_ = torch.max(x, dim=1)
 	return x
 

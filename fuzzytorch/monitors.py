@@ -53,6 +53,10 @@ class LossMonitor(object):
 		self.reset()
 
 	def reset(self):
+		self.loss_df = None
+		self.opt_df = None
+		self.loss_df_epoch = None
+		self.metrics_df_epoch = None
 		self.counter_k.reset()
 		self.counter_epoch.reset()
 

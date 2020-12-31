@@ -28,6 +28,7 @@ def get_pad_value(padding_mode, is_cnn, cnn_kwargs, k):
 		p = get_spatial_field(cnn_kwargs, k)//2
 		return [p,p] if is_cnn else [0,0]
 	elif padding_mode=='causal':
+		#print(cnn_kwargs['stride'])
 		assert cnn_kwargs['stride'][k]==1
 		p = get_spatial_field(cnn_kwargs, k)
 		return [p-1,0]
