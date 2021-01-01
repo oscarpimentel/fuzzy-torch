@@ -13,7 +13,7 @@ from torch.nn.init import xavier_uniform_, constant_, eye_
 from flamingchoripan import strings as strings
 from flamingchoripan import lists as lists
 from .pytorch_multihead_clone import MultiheadAttention
-from .batch_norms import MaskedBatchNorm1d
+from ..batch_norms import MaskedBatchNorm1d
 
 ###################################################################################################################################################
 
@@ -31,6 +31,7 @@ class SelfAttn(nn.Module):
 		super().__init__()
 
 		### CHECKS
+		assert input_dims%num_heads==0
 		assert in_dropout>=0 and in_dropout<=1
 		assert out_dropout>=0 and out_dropout<=1
 		assert attn_dropout>=0 and attn_dropout<=1
