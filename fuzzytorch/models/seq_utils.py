@@ -32,7 +32,7 @@ def seq_clean(x, onehot):
 	x = x.masked_fill(~onehot[...,None], 0) # clean using onehot
 	return x
 
-def seq_mean_pooling(x, onehot):
+def seq_avg_pooling(x, onehot):
 	'''
 	x (b,t,f)
 	onehot (b,t)
@@ -43,7 +43,9 @@ def seq_mean_pooling(x, onehot):
 	assert len(x.shape)==3
 
 	x = seq_clean(x, onehot)
-	x = x.sum(dim=1)/(onehot.sum(dim=1)[...,None]+C_.EPS) # (b,t,f) > (b,f)
+	new_onehot = onehot.clone()
+	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
+	x = x.sum(dim=1)/new_onehot.sum(dim=1)[...,None] # (b,t,f) > (b,f)
 	return x
 
 def seq_last_element(x, onehot):

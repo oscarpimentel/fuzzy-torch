@@ -176,13 +176,12 @@ class MLRNN(nn.Module):
 			input_dims_ = self.embd_dims_list[k]
 			output_dims_ = self.embd_dims_list[k+1]
 			rnn_kwargs = {
-				'in_dropout':in_dropout if k==0 else self.dropout,
-				'out_dropout':out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
-				'bias':bias,
-				'max_curve_length':self.max_curve_length,
+				'in_dropout':self.in_dropout if k==0 else self.dropout,
+				'out_dropout':self.out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
+				'bias':self.bias,
 				'bidirectional':self.bidirectional,
 			}
-			rnn = self.rnn_class(input_dims_, output_dims_, **rnn_kwargs)
+			rnn = self.rnn_class(input_dims_, output_dims_, self.max_curve_length, **rnn_kwargs)
 			self.rnns.append(rnn)
 
 		self.reset()
@@ -228,7 +227,7 @@ class MLRNN(nn.Module):
 		resume = ''
 		for k,rnn in enumerate(self.rnns):
 			resume += f'  ({k}) - {str(rnn)}\n'
-		txt = f'MLConv1D(\n{resume})({len(self):,}[p])'
+		txt = f'MLRNN(\n{resume})({len(self):,}[p])'
 		return txt
 
 class MLGRU(MLRNN):
