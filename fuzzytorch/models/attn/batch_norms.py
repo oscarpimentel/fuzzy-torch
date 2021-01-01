@@ -1,29 +1,12 @@
 from __future__ import print_function
 from __future__ import division
+from . import C_
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-def lengths_to_mask(lengths, max_len=None, dtype=None):
-	"""
-	Converts a "lengths" tensor to its binary mask representation.
-	
-	Based on: https://discuss.pytorch.org/t/how-to-generate-variable-length-mask/23397
-	
-	:lengths: N-dimensional tensor
-	:returns: N*max_len dimensional tensor. If max_len==None, max_len=max(lengtsh)
-	"""
-	assert len(lengths.shape) == 1, 'Length shape should be 1 dimensional.'
-	max_len = max_len or lengths.max().item()
-	mask = torch.arange(
-		max_len,
-		device=lengths.device,
-		dtype=lengths.dtype)\
-	.expand(len(lengths), max_len) < lengths.unsqueeze(1)
-	if dtype is not None:
-		mask = torch.as_tensor(mask, dtype=dtype, device=lengths.device)
-	return mask
+###################################################################################################################################################
 
 class MaskedBatchNorm1d(nn.BatchNorm1d):
 	"""
@@ -46,7 +29,10 @@ class MaskedBatchNorm1d(nn.BatchNorm1d):
 			track_running_stats
 		)
 
-	def forward(self, inp, lengths):
+	def forward(self, x, onehot):
+		return self.forward_(x, onehot)
+
+	def forward_(self, inp, mask):
 		inp = inp.permute(0,2,1)
 		self._check_input_dim(inp)
 
@@ -55,7 +41,6 @@ class MaskedBatchNorm1d(nn.BatchNorm1d):
 		# We transform the mask into a sort of P(inp) with equal probabilities
 		# for all unmasked elements of the tensor, and 0 probability for masked
 		# ones.
-		mask = lengths_to_mask(lengths, max_len=inp.shape[-1], dtype=inp.dtype)
 		n = mask.sum()
 		mask = mask / n
 		mask = mask.unsqueeze(1).expand(inp.shape)

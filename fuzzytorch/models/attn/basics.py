@@ -13,6 +13,7 @@ from torch.nn.init import xavier_uniform_, constant_, eye_
 from flamingchoripan import strings as strings
 from flamingchoripan import lists as lists
 from .pytorch_multihead_clone import MultiheadAttention
+from .batch_norms import MaskedBatchNorm1d
 
 ###################################################################################################################################################
 
@@ -59,7 +60,6 @@ class SelfAttn(nn.Module):
 		self.mh_attn = MultiheadAttention(self.input_dims, self.num_heads, **attn_kwargs)
 		self.in_dropout_f = nn.Dropout(self.in_dropout)
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
-		self.register_buffer('src_mask', attn_utils.generate_square_subsequent_mask(self.max_curve_length))
 
 		### MLP
 		mlp_kwargs = {
@@ -70,13 +70,19 @@ class SelfAttn(nn.Module):
 			'dropout':self.mlp_dropout,
 			'last_activation':'linear', # transformer
 		}
-		self.mlp = MLP(self.input_dims, self.output_dims, [self.input_dims]*1, **mlp_kwargs)
+		self.mlp = MLP(self.input_dims, self.output_dims, [self.input_dims*2]*1, **mlp_kwargs)
 		
+		### BATCH NORM
+		#self.uses_seq_len_wise_batchnorm
+		self.attn_bn = MaskedBatchNorm1d(self.input_dims)
+		self.mlp_bn = MaskedBatchNorm1d(self.input_dims)
+
 		self.activation_f = non_linear.get_activation(self.activation)
 		self.reset()
 
 	def reset(self):
-		pass
+		self.register_buffer('src_mask', attn_utils.generate_square_subsequent_mask(self.max_curve_length))
+		#print(self.src_mask)
 
 	def get_output_dims(self):
 		return self.output_dims
@@ -125,11 +131,13 @@ class SelfAttn(nn.Module):
 		keys = self.in_dropout_f(x.permute(1,0,2))
 		values = self.in_dropout_f(x.permute(1,0,2))
 		contexts, scores = self.mh_attn(queries, keys, values, **attn_kwargs)
+		#assert torch.all(scores.sum(dim=-1)>=0.99999)
 		x = contexts+values # res
 		x = x.permute(1,0,2)
-		assert torch.all(scores.sum(dim=-1)>=0.99999)
+		x = self.attn_bn(x, onehot)
 
 		x = self.mlp(x)+x # res
+		x = self.mlp_bn(x, onehot)
 		x = self.activation_f(x, dim=-1)
 		x = self.out_dropout_f(x)
 		return x, scores
@@ -137,8 +145,8 @@ class SelfAttn(nn.Module):
 class MLSelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, max_curve_length,
 		num_heads=2,
-		activation='linear',
-		last_activation='linear',
+		activation=C_.DEFAULT_ACTIVATION,
+		last_activation=C_.DEFAULT_LAST_ACTIVATION,
 		in_dropout=0.0,
 		dropout=0.0,
 		out_dropout=0.0,
