@@ -120,12 +120,12 @@ class SelfAttn(nn.Module):
 		'''
 		Parameters
 		----------
-		x (b,t,f): input tensor.
+		x (b,t,in): input tensor.
 		onehot (b,t)
 
 		Return
 		----------
-		x_out: (b,t,h): output tensor.
+		x: (b,t,out): output tensor.
 		scores: (b,h,t,qt)
 		'''
 		attn_kwargs = {
@@ -225,12 +225,12 @@ class MLSelfAttn(nn.Module):
 		'''
 		Parameters
 		----------
-		x (b,t,f): input tensor.
+		x (b,t,in): input tensor.
 		onehot (b,t)
 
 		Return
 		----------
-		x_out: (b,t,h): output tensor.
+		x: (b,t,out): output tensor.
 		layer_scores: list[(b,h,t,qt)]
 		'''
 		assert onehot.dtype==torch.bool
