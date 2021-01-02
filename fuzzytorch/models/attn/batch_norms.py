@@ -8,6 +8,40 @@ import torch.nn.functional as F
 
 ###################################################################################################################################################
 
+class LayerNorm(nn.Module):
+	def __init__(self, num_features,
+		eps=1e-5,
+		elementwise_affine=True,
+		):
+		super().__init__()
+		self.bn = torch.nn.LayerNorm([num_features],
+			eps,
+			elementwise_affine,
+			)
+
+	def forward(self, x, onehot):
+		return self.bn(x)
+
+def lengths_to_mask(lengths, max_len=None, dtype=None):
+	"""
+	Converts a "lengths" tensor to its binary mask representation.
+	
+	Based on: https://discuss.pytorch.org/t/how-to-generate-variable-length-mask/23397
+	
+	:lengths: N-dimensional tensor
+	:returns: N*max_len dimensional tensor. If max_len==None, max_len=max(lengtsh)
+	"""
+	assert len(lengths.shape) == 1, 'Length shape should be 1 dimensional.'
+	max_len = max_len or lengths.max().item()
+	mask = torch.arange(
+		max_len,
+		device=lengths.device,
+		dtype=lengths.dtype)\
+	.expand(len(lengths), max_len) < lengths.unsqueeze(1)
+	if dtype is not None:
+		mask = torch.as_tensor(mask, dtype=dtype, device=lengths.device)
+	return mask
+
 class MaskedBatchNorm1d(nn.BatchNorm1d):
 	"""
 	Masked verstion of the 1D Batch normalization.
@@ -19,8 +53,12 @@ class MaskedBatchNorm1d(nn.BatchNorm1d):
 	
 	Check pytorch's BatchNorm1d implementation for argument details.
 	"""
-	def __init__(self, num_features, eps=1e-5, momentum=0.1,
-				 affine=True, track_running_stats=True):
+	def __init__(self, num_features,
+		eps=1e-5,
+		momentum=0.1,
+		affine=True,
+		track_running_stats=True,
+		):
 		super().__init__(
 			num_features,
 			eps,
@@ -30,10 +68,13 @@ class MaskedBatchNorm1d(nn.BatchNorm1d):
 		)
 
 	def forward(self, x, onehot):
-		return self.forward_(x, onehot)
+		x = x.permute(0,2,1)
+		lengths = onehot.sum(dim=-1)
+		x = self.forward_(x, lengths)
+		#x = x.permute(0,2,1)
+		return x
 
-	def forward_(self, inp, mask):
-		inp = inp.permute(0,2,1)
+	def forward_(self, inp, lengths):
 		self._check_input_dim(inp)
 
 		exponential_average_factor = 0.0
@@ -41,6 +82,7 @@ class MaskedBatchNorm1d(nn.BatchNorm1d):
 		# We transform the mask into a sort of P(inp) with equal probabilities
 		# for all unmasked elements of the tensor, and 0 probability for masked
 		# ones.
+		mask = lengths_to_mask(lengths, max_len=inp.shape[-1], dtype=inp.dtype)
 		n = mask.sum()
 		mask = mask / n
 		mask = mask.unsqueeze(1).expand(inp.shape)

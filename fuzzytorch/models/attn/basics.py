@@ -14,7 +14,7 @@ from flamingchoripan import strings as strings
 from flamingchoripan import lists as lists
 #from .pytorch_multihead_clone import MultiheadAttention
 from torch.nn import MultiheadAttention
-from ..batch_norms import MaskedBatchNorm1d
+from .batch_norms import LayerNorm, MaskedBatchNorm1d
 
 ###################################################################################################################################################
 
@@ -27,7 +27,7 @@ class SelfAttn(nn.Module):
 		attn_dropout=0.0,
 		mlp_dropout=0.0,
 		bias=True,
-		uses_seq_len_wise_batchnorm=True,
+		uses_seq_len_wise_batchnorm=0,
 		**kwargs):
 		super().__init__()
 
@@ -75,9 +75,9 @@ class SelfAttn(nn.Module):
 		self.mlp = MLP(self.input_dims, self.output_dims, [self.input_dims*2]*1, **mlp_kwargs)
 		
 		### BATCH NORM
-		#self.uses_seq_len_wise_batchnorm
-		self.attn_bn = MaskedBatchNorm1d(self.input_dims)
-		self.mlp_bn = MaskedBatchNorm1d(self.input_dims)
+		# MaskedBatchNorm1d is buggy?
+		self.attn_bn = MaskedBatchNorm1d(self.input_dims) if self.uses_seq_len_wise_batchnorm else LayerNorm(self.input_dims)
+		self.mlp_bn = MaskedBatchNorm1d(self.input_dims) if self.uses_seq_len_wise_batchnorm else LayerNorm(self.input_dims)
 
 		self.activation_f = non_linear.get_activation(self.activation)
 		self.reset()
@@ -136,10 +136,10 @@ class SelfAttn(nn.Module):
 		#assert torch.all(scores.sum(dim=-1)>=0.99999)
 		x = contexts+values # res
 		x = x.permute(1,0,2)
-		#x = self.attn_bn(x, onehot) # buggy?
+		x = self.attn_bn(x, onehot)
 
 		x = self.mlp(x)+x # res
-		#x = self.mlp_bn(x, onehot) # buggy?
+		x = self.mlp_bn(x, onehot)
 		x = self.activation_f(x, dim=-1)
 		x = self.out_dropout_f(x)
 		return x, scores
@@ -154,7 +154,7 @@ class MLSelfAttn(nn.Module):
 		out_dropout=0.0,
 		attn_dropout=0.0,
 		bias=True,
-		uses_seq_len_wise_batchnorm=True,
+		uses_seq_len_wise_batchnorm=0,
 		**kwargs):
 		super().__init__()
 
