@@ -12,8 +12,8 @@ from ..basics import MLP
 from torch.nn.init import xavier_uniform_, constant_, eye_
 from flamingchoripan import strings as strings
 from flamingchoripan import lists as lists
-#from .pytorch_multihead_clone import MultiheadAttention
-from torch.nn import MultiheadAttention
+from .pytorch_multihead_clone import MultiheadAttention
+#from torch.nn import MultiheadAttention
 from .batch_norms import LayerNorm, MaskedBatchNorm1d
 
 ###################################################################################################################################################
@@ -26,8 +26,9 @@ class SelfAttn(nn.Module):
 		out_dropout=0.0,
 		attn_dropout=0.0,
 		mlp_dropout=0.0,
+		residual_dropout=0.0,
 		bias=True,
-		uses_seq_len_wise_batchnorm=0,
+		uses_length_wise_batchnorm=1,
 		**kwargs):
 		super().__init__()
 
@@ -47,8 +48,9 @@ class SelfAttn(nn.Module):
 		self.out_dropout = out_dropout
 		self.attn_dropout = attn_dropout
 		self.mlp_dropout = mlp_dropout
+		self.residual_dropout = residual_dropout
 		self.bias = bias
-		self.uses_seq_len_wise_batchnorm = uses_seq_len_wise_batchnorm
+		self.uses_length_wise_batchnorm = uses_length_wise_batchnorm
 
 		### ATTN
 		attn_kwargs = {
@@ -62,6 +64,8 @@ class SelfAttn(nn.Module):
 		self.mh_attn = MultiheadAttention(self.input_dims, self.num_heads, **attn_kwargs)
 		self.in_dropout_f = nn.Dropout(self.in_dropout)
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
+		self.res1_dropout_f = nn.Dropout(self.residual_dropout)
+		self.res2_dropout_f = nn.Dropout(self.residual_dropout)
 
 		### MLP
 		mlp_kwargs = {
@@ -76,8 +80,8 @@ class SelfAttn(nn.Module):
 		
 		### BATCH NORM
 		# MaskedBatchNorm1d is buggy?
-		self.attn_bn = MaskedBatchNorm1d(self.input_dims) if self.uses_seq_len_wise_batchnorm else LayerNorm(self.input_dims)
-		self.mlp_bn = MaskedBatchNorm1d(self.input_dims) if self.uses_seq_len_wise_batchnorm else LayerNorm(self.input_dims)
+		self.attn_bn = MaskedBatchNorm1d(self.input_dims) if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
+		self.mlp_bn = MaskedBatchNorm1d(self.input_dims) if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
 
 		self.activation_f = non_linear.get_activation(self.activation)
 		self.reset()
@@ -129,19 +133,21 @@ class SelfAttn(nn.Module):
 			'attn_mask':self.src_mask,
 			'need_weights':True,
 		}
-		queries = self.in_dropout_f(x.permute(1,0,2))
-		keys = self.in_dropout_f(x.permute(1,0,2))
-		values = self.in_dropout_f(x.permute(1,0,2))
+		x = self.in_dropout_f(x)
+		queries = x.permute(1,0,2)
+		keys = x.permute(1,0,2)
+		values = x.permute(1,0,2)
 		contexts, scores = self.mh_attn(queries, keys, values, **attn_kwargs)
 		#assert torch.all(scores.sum(dim=-1)>=0.99999)
-		x = contexts+values # res
+		x = contexts+self.res1_dropout_f(values) # res
 		x = x.permute(1,0,2)
 		x = self.attn_bn(x, onehot)
 
-		x = self.mlp(x)+x # res
+		x = self.mlp(x)+self.res2_dropout_f(x) # res
 		x = self.mlp_bn(x, onehot)
 		x = self.activation_f(x, dim=-1)
 		x = self.out_dropout_f(x)
+		#print(scores.shape)
 		return x, scores
 
 class MLSelfAttn(nn.Module):
@@ -154,7 +160,7 @@ class MLSelfAttn(nn.Module):
 		out_dropout=0.0,
 		attn_dropout=0.0,
 		bias=True,
-		uses_seq_len_wise_batchnorm=0,
+		uses_length_wise_batchnorm=1,
 		**kwargs):
 		super().__init__()
 
@@ -176,7 +182,7 @@ class MLSelfAttn(nn.Module):
 		self.out_dropout = out_dropout
 		self.attn_dropout = attn_dropout
 		self.bias = bias
-		self.uses_seq_len_wise_batchnorm = uses_seq_len_wise_batchnorm
+		self.uses_length_wise_batchnorm = uses_length_wise_batchnorm
 
 		activations = [activation]*(len(self.embd_dims_list)-1) # create activations along
 		if not self.last_activation is None:
@@ -194,7 +200,7 @@ class MLSelfAttn(nn.Module):
 				'out_dropout':self.out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
 				'attn_dropout':self.attn_dropout,
 				'bias':self.bias,
-				'uses_seq_len_wise_batchnorm':self.uses_seq_len_wise_batchnorm,
+				'uses_length_wise_batchnorm':self.uses_length_wise_batchnorm,
 			}
 			self_attn = SelfAttn(input_dims_, output_dims_, self.max_curve_length, **attn_kwargs)
 			self.self_attns.append(self_attn)
