@@ -2,29 +2,102 @@ from __future__ import print_function
 from __future__ import division
 
 import torch
+from torch._C import _is_torch_function_enabled, _disabled_torch_function_impl
+
 from torch import Tensor
 from torch.nn import Module, Parameter, Linear
 from torch.nn.init import xavier_uniform_, constant_, eye_
 from torch.nn import functional as F
 from torch.nn.functional import linear, softmax, dropout
+<<<<<<< HEAD
 from torch.overrides import has_torch_function, handle_torch_function
-#from torch import _overrides
-# import has_torch_function
+=======
+from typing import Dict, Set, List, Any, Callable, Iterable
 
-'''
-def has_torch_function(relevant_args):
-    """Check for __torch_function__ implementations in the elements of an iterable
-    Arguments
-    ---------
-    relevant_args : iterable
-        Iterable or aguments to check for __torch_function__ methods.
-    Returns
-    -------
-    True if any of the elements of relevant_args have __torch_function__
-    implementations, False otherwise.
-    """
-    return any(hasattr(a, '__torch_function__') for a in relevant_args)
-'''
+def handle_torch_function(
+		public_api: Callable, relevant_args: Iterable[Any], *args, **kwargs) -> Any:
+	"""Implement a function with checks for ``__torch_function__`` overrides.
+
+	See torch::autograd::handle_torch_function for the equivalent of this
+	function in the C++ implementation.
+
+	Arguments
+	---------
+	public_api : function
+		Function exposed by the public torch API originally called like
+		``public_api(*args, **kwargs)`` on which arguments are now being
+		checked.
+	relevant_args : iterable
+		Iterable of arguments to check for __torch_function__ methods.
+	args : tuple
+		Arbitrary positional arguments originally passed into ``public_api``.
+	kwargs : tuple
+		Arbitrary keyword arguments originally passed into ``public_api``.
+
+	Returns
+	-------
+	object
+		Result from calling ``implementation`` or an ``__torch_function__``
+		method, as appropriate.
+
+	Raises
+	------
+	TypeError : if no implementation is found.
+
+	Example
+	-------
+	>>> def func(a):
+	...     if type(a) is not torch.Tensor:  # This will make func dispatchable by __torch_function__
+	...         return handle_torch_function(func, (a,), a)
+	...     return a + 0
+	"""
+	# Check for __torch_function__ methods.
+	overloaded_args = _get_overloaded_args(relevant_args)
+	# overloaded_args already have unique types.
+	types = tuple(map(type, overloaded_args))
+
+	# Call overrides
+	for overloaded_arg in overloaded_args:
+		# Use `public_api` instead of `implementation` so __torch_function__
+		# implementations can do equality/identity comparisons.
+		result = overloaded_arg.__torch_function__(public_api, types, args, kwargs)
+
+		if result is not NotImplemented:
+			return result
+
+	func_name = '{}.{}'.format(public_api.__module__, public_api.__name__)
+	raise TypeError("no implementation found for '{}' on types that implement "
+					'__torch_function__: {}'
+					.format(func_name, [type(arg) for arg in overloaded_args]))
+
+def has_torch_function(relevant_args: Iterable[Any]) -> bool:
+	"""Check for __torch_function__ implementations in the elements of an iterable.
+
+	Considers exact ``Tensor`` s non-dispatchable.
+
+	Arguments
+	---------
+	relevant_args : iterable
+		Iterable or aguments to check for __torch_function__ methods.
+
+	Returns
+	-------
+	bool
+		True if any of the elements of relevant_args have __torch_function__
+		implementations, False otherwise.
+
+	See Also
+	________
+	torch.is_tensor_like
+		Checks if something is a Tensor-like, including an exact ``Tensor``.
+	"""
+	return _is_torch_function_enabled() and any(
+		type(a) is not torch.Tensor and
+		getattr(a, '__torch_function__', _disabled_torch_function_impl)
+		is not _disabled_torch_function_impl
+		for a in relevant_args
+	)
+>>>>>>> fd60ce4fbd947f49e545e61ddbd3bb485257b5d2
 
 class MultiheadAttention(Module):
 	__annotations__ = {

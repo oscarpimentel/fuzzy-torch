@@ -12,7 +12,8 @@ from ..basics import MLP
 from torch.nn.init import xavier_uniform_, constant_, eye_
 from flamingchoripan import strings as strings
 from flamingchoripan import lists as lists
-from .pytorch_multihead_clone import MultiheadAttention
+#from .pytorch_multihead_clone import MultiheadAttention
+from torch.nn import MultiheadAttention
 from ..batch_norms import MaskedBatchNorm1d
 
 ###################################################################################################################################################
@@ -135,10 +136,10 @@ class SelfAttn(nn.Module):
 		#assert torch.all(scores.sum(dim=-1)>=0.99999)
 		x = contexts+values # res
 		x = x.permute(1,0,2)
-		x = self.attn_bn(x, onehot)
+		#x = self.attn_bn(x, onehot) # buggy?
 
 		x = self.mlp(x)+x # res
-		x = self.mlp_bn(x, onehot)
+		#x = self.mlp_bn(x, onehot) # buggy?
 		x = self.activation_f(x, dim=-1)
 		x = self.out_dropout_f(x)
 		return x, scores

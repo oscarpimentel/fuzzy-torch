@@ -13,13 +13,11 @@ def get_model_name(model_name_dict):
 
 def tdict_to_device(d, device):
 	if isinstance(d, dict):
-		for k in d.keys():
-			x = d[k]
-			tdict_to_device(x, device)
+		return {k:tdict_to_device(d[k], device) for k in d.keys()}
 	elif isinstance(d, torch.Tensor):
-		d.to(device)
+		return d.to(device)
 	else:
-		pass
+		raise Exception(f'not supported {type(d)}')
 
 def get_tdict_repr(d):
 	if isinstance(d, dict):
@@ -44,8 +42,8 @@ class TDictHolder():
 	def to(self, device,
 		add_dummy_dim=False,
 		):
-		tdict_to_device(self.d, device)
-		return default_collate([self.d]) if add_dummy_dim else self.d
+		d = tdict_to_device(self.d, device)
+		return default_collate([d]) if add_dummy_dim else d
 
 	def __getitem__(self, key):
 		return self.d[key]
