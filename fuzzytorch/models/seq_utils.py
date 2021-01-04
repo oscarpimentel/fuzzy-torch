@@ -139,7 +139,7 @@ def parallel_to_serial(list_x, s_onehot,
 	modes = s_onehot.shape[-1]
 	x_ = list_x[0]
 	new_shape = (x_.shape[0], x_.shape[1]+1, x_.shape[2])
-	x_s = torch.full(new_shape, fill_value)
+	x_s = torch.full(new_shape, fill_value, device=x.device, dtype=x.dtype)
 	for i in range(modes):
 		x = list_x[i]
 		onehot = s_onehot[...,i]
@@ -148,7 +148,7 @@ def parallel_to_serial(list_x, s_onehot,
 		s2p_mapping_indexs = (torch.cumsum(onehot, dim=1)-1).masked_fill(~onehot, IMD)
 		source = torch.cumsum(torch.ones_like(s2p_mapping_indexs, device=x.device, dtype=x.dtype)[...,None], dim=1)-1
 		
-		p2s_mapping_indexs = torch.full((x_.shape[0], x_.shape[1]+1, 1), IMD, device=x.device, dtype=x.dtype)
+		p2s_mapping_indexs = torch.full((x_.shape[0], x_.shape[1]+1, 1), IMD, device=x.device)
 		#print(source.shape)
 		#print(p2s_mapping_indexs.shape)
 		seq_index_mapping_(source, s2p_mapping_indexs, p2s_mapping_indexs)
