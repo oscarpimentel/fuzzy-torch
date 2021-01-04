@@ -7,18 +7,6 @@ import numpy as np
 
 ###################################################################################################################################################
 
-def mapping(source, indexs, output,
-	dim=1,
-	):
-	fixed_indexs = indexs.clone()
-	IMD = source.shape[1]
-	fixed_indexs[fixed_indexs==IMD] = output.shape[dim]-1
-	fixed_indexs = fixed_indexs.unsqueeze(-1).expand(-1,-1,source.shape[-1])
-	#print(output.device, fixed_indexs.device, source.device)
-	output.scatter_(dim, fixed_indexs, source)
-
-###################################################################################################################################################
-
 def seq_clean(x, onehot):
 	'''
 	x (b,t,f)
@@ -94,6 +82,25 @@ def get_seq_onehot_mask(seqlengths, max_seqlength,
 	mask = (mask < seqlengths[...,None])
 	return mask.bool() # (b,t,f)
 
+###################################################################################################################################################
+
+def seq_index_mapping_(source, idxs, output,
+	dim=1,
+	):
+	assert source.shape[0]==output.shape[0]
+	assert source.shape[1]==output.shape[1]-1
+	assert source.shape[2]==output.shape[2]
+	assert len(source.shape)==3
+	assert len(idxs.shape)==2
+	assert idxs.shape==source.shape[:-1]
+
+	fixed_indexs = idxs.clone()
+	IMD = source.shape[1]
+	fixed_indexs[fixed_indexs==IMD] = output.shape[dim]-1
+	fixed_indexs = fixed_indexs.unsqueeze(-1).expand(-1,-1,source.shape[-1])
+	#print(output.device, fixed_indexs.device, source.device)
+	output.scatter_(dim, fixed_indexs, source)
+
 def serial_to_parallel(x, onehot,
 	fill_value=0,
 	):
@@ -111,5 +118,62 @@ def serial_to_parallel(x, onehot,
 	#print('s2p_mapping_indexs', s2p_mapping_indexs.shape, s2p_mapping_indexs)
 	new_shape = (x.shape[0], x.shape[1]+1, x.shape[2])
 	new_x = torch.full(new_shape, fill_value, device=x.device, dtype=x.dtype)
-	mapping(x, s2p_mapping_indexs, new_x)
+	seq_index_mapping_(x, s2p_mapping_indexs, new_x)
 	return new_x[:,:-1,:]
+
+def parallel_to_serial(list_x, s_onehot,
+	fill_value=0,
+	):
+	'''
+	list_x list[(b,t,f)]
+	onehot (b,t,d)
+	'''
+	assert isinstance(list_x, list)
+	assert len(list_x)>0
+	assert s_onehot.dtype==torch.bool
+	assert len(s_onehot.shape)==3
+	for x in list_x:
+		assert x.shape[:-1]==s_onehot.shape[:-1]
+		assert len(x.shape)==3
+
+	modes = s_onehot.shape[-1]
+	x_ = list_x[0]
+	new_shape = (x_.shape[0], x_.shape[1]+1, 1)
+	x_s = torch.full(new_shape, fill_value)
+	for i in range(modes):
+		x = list_x[i]
+		onehot = s_onehot[...,i]
+
+		IMD = onehot.shape[1]
+		s2p_mapping_indexs = (torch.cumsum(onehot, dim=1)-1).masked_fill(~onehot, IMD)
+		source = torch.cumsum(torch.ones_like(s2p_mapping_indexs, device=x.device, dtype=x.dtype)[...,None], dim=1)-1
+		
+		p2s_mapping_indexs = torch.full(new_shape, IMD, device=x.device, dtype=x.dtype)
+		#print(source.shape)
+		#print(p2s_mapping_indexs.shape)
+		seq_index_mapping_(source, s2p_mapping_indexs, p2s_mapping_indexs)
+		#print(p2s_mapping_indexs.shape)
+		#idxs = torch.nonzero(onehot)
+		#print(idxs.shape, idxs)
+		#assert 0
+		#print(x_s.shape, onehot.shape, x.shape)
+		seq_index_mapping_(x, p2s_mapping_indexs[:,:-1,0].long(), x_s)
+		#p2s_mapping_indexs = torch.where(onehot)
+		#print(p2s_mapping_indexs)
+		#assert 0
+		#print('p2s_mapping_indexs', p2s_mapping_indexs.shape, p2s_mapping_indexs)
+		#index_mapping(x, p2s_mapping_indexs, x_s)
+	return x_s[:,:-1,:]
+
+def get_random_onehot(x, modes):
+	'''
+	x (b,t,f)
+	'''
+	assert len(x.shape)==3
+	assert modes>=2
+
+	shape = list(x.shape)[:-1]+[modes]
+	r = np.random.uniform(0, modes, size=shape)
+	r_max = r.max(axis=-1)[...,None]
+	onehot = torch.as_tensor(r>=r_max).bool()
+	return onehot
