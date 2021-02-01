@@ -80,7 +80,7 @@ def get_seq_onehot_mask(seqlengths, max_seqlength,
 	batch_size = len(seqlengths)
 	mask = torch.arange(max_seqlength).expand(batch_size, max_seqlength).to(seqlengths.device if device is None else device)
 	mask = (mask < seqlengths[...,None])
-	return mask.bool() # (b,t,f)
+	return mask.bool() # (b,t)
 
 ###################################################################################################################################################
 
@@ -177,3 +177,22 @@ def get_random_onehot(x, modes):
 	r_max = r.max(axis=-1)[...,None]
 	onehot = torch.as_tensor(r>=r_max).bool()
 	return onehot
+
+
+def get_seq_clipped_shape(x, new_len):
+	'''
+	Used in dataset creation
+	x (t,f)
+	'''
+	assert len(x.shape)==2
+	if new_len is None:
+		return x
+	assert new_len>0
+
+	t,f = x.size()
+	if new_len<=t:
+		return x[:new_len]
+	else:
+		new_x = torch.zeros(size=(new_len,f), device=x.device, dtype=x.dtype)
+		new_x[:t] = x
+		return new_x

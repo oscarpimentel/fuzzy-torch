@@ -11,7 +11,8 @@ from flamingchoripan import strings as strings
 ###################################################################################################################################################
 
 class LSTM(nn.Module):
-	def __init__(self, input_dims, output_dims, max_curve_length,
+	def __init__(self, input_dims, output_dims,
+		max_curve_length=None,
 		in_dropout=0.,
 		out_dropout=0.,
 		bias=True,
@@ -74,7 +75,8 @@ class LSTM(nn.Module):
 		return x_packed
 
 class GRU(nn.Module):
-	def __init__(self, input_dims, output_dims, max_curve_length,
+	def __init__(self, input_dims, output_dims,
+		max_curve_length=None,
 		in_dropout=0.0,
 		out_dropout=0.0,
 		bias=True,
@@ -143,7 +145,8 @@ class GRU(nn.Module):
 ###################################################################################################################################################
 
 class MLRNN(nn.Module):
-	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, max_curve_length:int,
+	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list,
+		max_curve_length=None,
 		in_dropout=0.0,
 		dropout=0.0,
 		out_dropout=0.0,
@@ -155,7 +158,6 @@ class MLRNN(nn.Module):
 		### CHECKS
 		assert isinstance(embd_dims_list, list) and len(embd_dims_list)>=0
 		assert isinstance(bidirectional, bool)
-		assert isinstance(max_curve_length, int) and not max_curve_length is None
 		assert in_dropout>=0 and in_dropout<=1
 		assert dropout>=0 and dropout<=1
 		assert out_dropout>=0 and out_dropout<=1
@@ -176,12 +178,13 @@ class MLRNN(nn.Module):
 			input_dims_ = self.embd_dims_list[k]
 			output_dims_ = self.embd_dims_list[k+1]
 			rnn_kwargs = {
+				'max_curve_length':self.max_curve_length,
 				'in_dropout':self.in_dropout if k==0 else self.dropout,
 				'out_dropout':self.out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
 				'bias':self.bias,
 				'bidirectional':self.bidirectional,
 			}
-			rnn = self.rnn_class(input_dims_, output_dims_, self.max_curve_length, **rnn_kwargs)
+			rnn = self.rnn_class(input_dims_, output_dims_, **rnn_kwargs)
 			self.rnns.append(rnn)
 
 		self.reset()
@@ -212,6 +215,7 @@ class MLRNN(nn.Module):
 		assert x.shape[:-1]==onehot.shape
 		assert len(x.shape)==3
 
+		self.max_curve_length = x.shape[1]
 		extra_info = {}
 		lengths = torch.clamp(onehot.sum(dim=-1), 1, None) # forced 1 to avoid errors of empty bands sequences
 		x_packed = nn.utils.rnn.pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False) # argument is tensor
@@ -231,7 +235,8 @@ class MLRNN(nn.Module):
 		return txt
 
 class MLGRU(MLRNN):
-	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, max_curve_length:int,
+	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list,
+		max_curve_length=None,
 		in_dropout=0.0,
 		dropout=0.0,
 		out_dropout=0.0,
@@ -240,7 +245,8 @@ class MLGRU(MLRNN):
 		**kwargs):
 		self.class_name = 'GRU'
 		self.rnn_class = GRU
-		super().__init__(input_dims, output_dims, embd_dims_list, max_curve_length,
+		super().__init__(input_dims, output_dims, embd_dims_list,
+			max_curve_length,
 			in_dropout,
 			dropout,
 			out_dropout,
@@ -249,7 +255,8 @@ class MLGRU(MLRNN):
 			)
 
 class MLLSTM(MLRNN):
-	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, max_curve_length:int,
+	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list,
+		max_curve_length=None,
 		in_dropout=0.0,
 		dropout=0.0,
 		out_dropout=0.0,
@@ -258,7 +265,8 @@ class MLLSTM(MLRNN):
 		**kwargs):
 		self.class_name = 'LSTM'
 		self.rnn_class = LSTM
-		super().__init__(input_dims, output_dims, embd_dims_list, max_curve_length,
+		super().__init__(input_dims, output_dims, embd_dims_list,
+			max_curve_length,
 			in_dropout,
 			dropout,
 			out_dropout,
