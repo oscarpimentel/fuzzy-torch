@@ -218,7 +218,7 @@ class MLRNN(nn.Module):
 		self.max_curve_length = x.shape[1]
 		extra_info = {}
 		lengths = torch.clamp(onehot.sum(dim=-1), 1, None) # forced 1 to avoid errors of empty bands sequences
-		x_packed = nn.utils.rnn.pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False) # argument is tensor
+		x_packed = nn.utils.rnn.pack_padded_sequence(x, lengths.to('cpu'), batch_first=True, enforce_sorted=False) # argument is tensor
 		for k,rnn in enumerate(self.rnns):
 			x_packed = rnn(x_packed)
 		x,_ = nn.utils.rnn.pad_packed_sequence(x_packed, batch_first=True, padding_value=0, total_length=self.max_curve_length) # argument is Sequence

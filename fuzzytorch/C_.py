@@ -5,6 +5,7 @@ from flamingchoripan import C_ as C_fc
 ###################################################################################################################################################
 
 EPS = 1e-10
+
 DEFAULT_PADDING_MODE = 'same'
 DEFAULT_ACTIVATION = 'relu'
 DEFAULT_LAST_ACTIVATION = 'linear'

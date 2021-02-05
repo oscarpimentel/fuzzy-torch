@@ -19,7 +19,8 @@ from .batch_norms import LayerNorm, MaskedBatchNorm1d
 ###################################################################################################################################################
 
 class SelfAttn(nn.Module):
-	def __init__(self, input_dims:int, output_dims:int, max_curve_length,
+	def __init__(self, input_dims:int, output_dims:int,
+		max_curve_length=None,
 		num_heads=2,
 		activation='linear',
 		in_dropout=0.0,
@@ -87,8 +88,15 @@ class SelfAttn(nn.Module):
 		self.reset()
 
 	def reset(self):
-		self.register_buffer('src_mask', attn_utils.generate_square_subsequent_mask(self.max_curve_length))
-		#print(self.src_mask)
+		pass
+
+	def register_src_mask(self, max_curve_length, device):
+		max_curve_length_changed = max_curve_length!=self.max_curve_length
+		if max_curve_length_changed:
+			self.max_curve_length = max_curve_length
+			#self.register_buffer('src_mask', attn_utils.generate_square_subsequent_mask(self.max_curve_length).to(device))
+			self.src_mask = attn_utils.generate_square_subsequent_mask(self.max_curve_length).to(device)
+			#print(self.src_mask.device)
 
 	def get_output_dims(self):
 		return self.output_dims
@@ -128,6 +136,8 @@ class SelfAttn(nn.Module):
 		x: (b,t,out): output tensor.
 		scores: (b,h,t,qt)
 		'''
+		self.register_src_mask(x.shape[1], x.device)
+
 		attn_kwargs = {
 			'key_padding_mask':~onehot,
 			'attn_mask':self.src_mask,
@@ -151,7 +161,8 @@ class SelfAttn(nn.Module):
 		return x, scores
 
 class MLSelfAttn(nn.Module):
-	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, max_curve_length,
+	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list,
+		max_curve_length=None,
 		num_heads=2,
 		activation=C_.DEFAULT_ACTIVATION,
 		last_activation=C_.DEFAULT_LAST_ACTIVATION,
@@ -194,6 +205,7 @@ class MLSelfAttn(nn.Module):
 			input_dims_ = self.embd_dims_list[k]
 			output_dims_ = self.embd_dims_list[k+1]
 			attn_kwargs = {
+				'max_curve_length':self.max_curve_length,
 				'num_heads':self.num_heads,
 				'activation':activations[k],
 				'in_dropout':self.in_dropout if k==0 else self.dropout,
@@ -202,7 +214,7 @@ class MLSelfAttn(nn.Module):
 				'bias':self.bias,
 				'uses_length_wise_batchnorm':self.uses_length_wise_batchnorm,
 			}
-			self_attn = SelfAttn(input_dims_, output_dims_, self.max_curve_length, **attn_kwargs)
+			self_attn = SelfAttn(input_dims_, output_dims_, **attn_kwargs)
 			self.self_attns.append(self_attn)
 
 		self.reset()

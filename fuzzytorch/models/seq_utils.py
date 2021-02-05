@@ -87,6 +87,7 @@ def get_seq_onehot_mask(seqlengths, max_seqlength,
 def seq_index_mapping_(source, idxs, output,
 	dim=1,
 	):
+	assert source.dtype==output.dtype
 	assert source.shape[0]==output.shape[0]
 	assert source.shape[1]==output.shape[1]-1
 	assert source.shape[2]==output.shape[2]
@@ -148,7 +149,7 @@ def parallel_to_serial(list_x, s_onehot,
 		s2p_mapping_indexs = (torch.cumsum(onehot, dim=1)-1).masked_fill(~onehot, IMD)
 		source = torch.cumsum(torch.ones_like(s2p_mapping_indexs, device=x.device, dtype=x.dtype)[...,None], dim=1)-1
 		
-		p2s_mapping_indexs = torch.full((x_.shape[0], x_.shape[1]+1, 1), IMD, device=x.device)
+		p2s_mapping_indexs = torch.full((x_.shape[0], x_.shape[1]+1, 1), IMD, device=x.device, dtype=x.dtype)
 		#print(source.shape)
 		#print(p2s_mapping_indexs.shape)
 		seq_index_mapping_(source, s2p_mapping_indexs, p2s_mapping_indexs)

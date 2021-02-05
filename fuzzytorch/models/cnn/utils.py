@@ -36,7 +36,10 @@ def get_pad_value(padding_mode, is_cnn, cnn_kwargs, k):
 		raise Exception(f'not supported padding_mode: {padding_mode}')
 
 def get_output_space(input_space, cnn_kwargs, cnn_padding, k):
-	out = ((input_space[k]+2*cnn_padding[k]//2-cnn_kwargs['dilation'][k]*(cnn_kwargs['kernel_size'][k]-1)-1) / cnn_kwargs['stride'][k]) + 1
+	input_space_k = input_space[k]
+	if input_space_k is None:
+		return None
+	out = ((input_space_k+2*cnn_padding[k]//2-cnn_kwargs['dilation'][k]*(cnn_kwargs['kernel_size'][k]-1)-1) / cnn_kwargs['stride'][k]) + 1
 	return int(out)
 
 

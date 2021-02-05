@@ -175,21 +175,35 @@ class LossMonitor(object):
 		self.best_epoch = best_epoch
 
 	def get_time_per_iteration(self):
-		return XError(self.loss_df['__dt__'].values)
+		try:
+			return XError(self.loss_df['__dt__'].values)
+		except:
+			return None
 
 	def get_evaluation_set_names(self):
-		return list(np.unique(self.loss_df_epoch['__set__'].values))
+		try:
+			return list(np.unique(self.loss_df_epoch['__set__'].values))
+		except:
+			return None
 
 	def get_time_per_epoch_set(self, set_name):
 		return XError(self.loss_df_epoch['__dt__'][self.loss_df_epoch['__set__'].isin([set_name])].values)
 
 	def get_time_per_epoch(self):
-		return sum([self.get_time_per_epoch_set(set_name) for set_name in self.get_evaluation_set_names()])
+		evaluation_set_names = self.get_evaluation_set_names()
+		if evaluation_set_names is None:
+			return None
+		else:
+			sum([self.get_time_per_epoch_set(set_name) for set_name in evaluation_set_names])
 
 	def get_total_time(self):
-		t = self.loss_df['__dt__'].values.sum()
-		t += sum([self.loss_df_epoch['__dt__'][self.loss_df_epoch['__set__'].isin([set_name])].values.sum() for set_name in self.get_evaluation_set_names()])
-		return t
+		evaluation_set_names = self.get_evaluation_set_names()
+		if evaluation_set_names is None:
+			return None
+		else:
+			t = self.loss_df['__dt__'].values.sum()
+			t += sum([self.loss_df_epoch['__dt__'][self.loss_df_epoch['__set__'].isin([set_name])].values.sum() for set_name in evaluation_set_names])
+			return t
 
 	### file methods
 	def remove_filedir(self, filedir):

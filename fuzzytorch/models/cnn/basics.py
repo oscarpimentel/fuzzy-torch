@@ -21,6 +21,7 @@ class ConvLinear(nn.Module):
 		out_dropout=0.0,
 		bias=True,
 		uses_custom_non_linear_init=False,
+		auto_update_input_space=True,
 
 		cnn_kwargs=C_.DEFAULT_CNN_KWARGS,
 		pool_kwargs=C_.DEFAULT_POOL_KWARGS,
@@ -34,13 +35,14 @@ class ConvLinear(nn.Module):
 		assert out_dropout>=0 and out_dropout<=1
 
 		self.input_dims = input_dims
-		self.input_space = input_space
+		self.input_space = input_space.copy()
 		self.output_dims = output_dims
 		self.activation = activation
 		self.in_dropout = in_dropout
 		self.out_dropout = out_dropout
 		self.bias = bias
 		self.uses_custom_non_linear_init = uses_custom_non_linear_init
+		self.auto_update_input_space = auto_update_input_space
 
 		self.cnn_kwargs = cnn_utils.get_correct_cnn_kwargs(self.len_input_space_shape, cnn_kwargs)
 		self.pool_kwargs = cnn_utils.get_correct_cnn_kwargs(self.len_input_space_shape, pool_kwargs)
@@ -135,6 +137,7 @@ class MLConv(nn.Module):
 		out_dropout=0.0,
 		bias=True,
 		uses_custom_non_linear_init=False,
+		auto_update_input_space=True,
 
 		cnn_kwargs=C_.DEFAULT_CNN_KWARGS,
 		pool_kwargs=C_.DEFAULT_POOL_KWARGS,
@@ -170,6 +173,7 @@ class MLConv(nn.Module):
 				'out_dropout':out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
 				'bias':bias,
 				'uses_custom_non_linear_init':uses_custom_non_linear_init,
+				'auto_update_input_space':auto_update_input_space,
 
 				'cnn_kwargs':cnn_kwargs,
 				'pool_kwargs':pool_kwargs,
@@ -213,6 +217,7 @@ class Conv1DLinear(ConvLinear):
 		out_dropout=0.0,
 		bias=True,
 		uses_custom_non_linear_init=False,
+		auto_update_input_space=True,
 
 		cnn_kwargs=C_.DEFAULT_CNN_KWARGS,
 		pool_kwargs=C_.DEFAULT_POOL_KWARGS,
@@ -231,6 +236,7 @@ class Conv1DLinear(ConvLinear):
 			out_dropout,
 			bias,
 			uses_custom_non_linear_init,
+			auto_update_input_space,
 
 			cnn_kwargs,
 			pool_kwargs,
@@ -241,6 +247,8 @@ class Conv1DLinear(ConvLinear):
 		'''
 		x: (b,f,t)
 		'''
+		if self.auto_update_input_space:
+			self.input_space = [x.shape[2]] # auto
 		assert len(x.shape)==3
 		b,f,t = x.size()
 		assert all([f==self.input_dims, t==self.input_space[0]])
@@ -252,6 +260,7 @@ class MLConv1D(MLConv):
 		out_dropout=0.0,
 		bias=True,
 		uses_custom_non_linear_init=False,
+		auto_update_input_space=True,
 
 		cnn_kwargs=C_.DEFAULT_CNN_KWARGS,
 		pool_kwargs=C_.DEFAULT_POOL_KWARGS,
@@ -267,6 +276,7 @@ class MLConv1D(MLConv):
 			out_dropout,
 			bias,
 			uses_custom_non_linear_init,
+			auto_update_input_space,
 
 			cnn_kwargs,
 			pool_kwargs,
@@ -292,6 +302,7 @@ class Conv2DLinear(ConvLinear):
 		out_dropout=0.0,
 		bias=True,
 		uses_custom_non_linear_init=False,
+		auto_update_input_space=True,
 
 		cnn_kwargs=C_.DEFAULT_CNN_KWARGS,
 		pool_kwargs=C_.DEFAULT_POOL_KWARGS,
@@ -310,6 +321,7 @@ class Conv2DLinear(ConvLinear):
 			out_dropout,
 			bias,
 			uses_custom_non_linear_init,
+			auto_update_input_space,
 
 			cnn_kwargs,
 			pool_kwargs,
@@ -320,6 +332,8 @@ class Conv2DLinear(ConvLinear):
 		'''
 		x: (b,f,w,h)
 		'''
+		if self.auto_update_input_space:
+			self.input_space = list(x.shape[2:]) # auto
 		assert len(x.shape)==4
 		b,f,w,h = x.size()
 		assert all([f==self.input_dims, w==self.input_space[0], h==self.input_space[1]])
@@ -331,6 +345,7 @@ class MLConv2D(MLConv):
 		out_dropout=0.0,
 		bias=True,
 		uses_custom_non_linear_init=False,
+		auto_update_input_space=True,
 
 		cnn_kwargs=C_.DEFAULT_CNN_KWARGS,
 		pool_kwargs=C_.DEFAULT_POOL_KWARGS,
@@ -346,6 +361,7 @@ class MLConv2D(MLConv):
 			out_dropout,
 			bias,
 			uses_custom_non_linear_init,
+			auto_update_input_space,
 
 			cnn_kwargs,
 			pool_kwargs,
