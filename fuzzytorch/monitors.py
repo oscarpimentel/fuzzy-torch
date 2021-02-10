@@ -178,7 +178,7 @@ class LossMonitor(object):
 		try:
 			return XError(self.loss_df['__dt__'].values)
 		except:
-			return None
+			return XError([])
 
 	def get_evaluation_set_names(self):
 		try:
@@ -192,14 +192,14 @@ class LossMonitor(object):
 	def get_time_per_epoch(self):
 		evaluation_set_names = self.get_evaluation_set_names()
 		if evaluation_set_names is None:
-			return None
+			return np.nan
 		else:
-			sum([self.get_time_per_epoch_set(set_name) for set_name in evaluation_set_names])
+			return sum([self.get_time_per_epoch_set(set_name) for set_name in evaluation_set_names])
 
 	def get_total_time(self):
 		evaluation_set_names = self.get_evaluation_set_names()
 		if evaluation_set_names is None:
-			return None
+			return np.nan
 		else:
 			t = self.loss_df['__dt__'].values.sum()
 			t += sum([self.loss_df_epoch['__dt__'][self.loss_df_epoch['__set__'].isin([set_name])].values.sum() for set_name in evaluation_set_names])

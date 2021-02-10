@@ -109,6 +109,6 @@ class Accuracy(FTMetric):
 		assert y_pred.shape==y_target.shape
 		assert len(y_pred.shape)==1
 
-		accuracies = get_labels_accuracy(y_pred, y_target, labels) if self.balanced else torch.mean((y_pred==y_target).float()*100)[None]
+		accuracies = get_labels_accuracy(y_pred, y_target, labels) if self.balanced else torch.mean((y_pred==y_target).float()*100)[None] # (b) > (1)
 		#print(accuracies.shape)
 		return MetricResult(accuracies)

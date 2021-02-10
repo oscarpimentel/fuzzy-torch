@@ -109,8 +109,8 @@ class ModelTrainHandler(object):
 		with torch.no_grad():
 			for lmonitor in self.lmonitors:
 				lmonitor_cr = times.Cronometer()
-				for lmonitor_aux in self.lmonitors:
-					lmonitor_aux.eval() # just in case
+				#for lmonitor_aux in self.lmonitors:
+				#	lmonitor_aux.eval() # just in case
 
 				if lmonitor.needs_evaluation():
 					if text is None:
@@ -186,6 +186,7 @@ class ModelTrainHandler(object):
 			try:
 				if can_be_in_loop:
 					#with torch.autograd.detect_anomaly(): # really useful but slow af
+					self.model.train() # ensure train mode!
 					if self.uses_train_eval_loader_methods:
 						train_loader.train() # dataset train mode!
 
@@ -194,10 +195,9 @@ class ModelTrainHandler(object):
 						losses_text_list = []
 						for kt,lmonitor in enumerate(self.lmonitors): # along train lmonitors
 							lmonitor_cr = times.Cronometer()
-							for lmonitor_aux in self.lmonitors: # freeze all other models except actual
-								lmonitor_aux.eval() 
-
-							lmonitor.train() # model train mode!
+							#for lmonitor_aux in self.lmonitors: # freeze all other models except actual
+							#	lmonitor_aux.eval() # it's neccesary????
+							#lmonitor.train() # ensure train mode!
 							lmonitor.optimizer.zero_grad() # set gradient to 0
 
 							#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
