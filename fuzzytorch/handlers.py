@@ -15,7 +15,7 @@ from flamingchoripan import prints
 import warnings
 from . import monitors as mon
 from . import exceptions as ex
-from .utils import get_model_name, TDictHolder
+from .utils import get_model_name, TDictHolder, minibatch_dict_collate
 from .models.utils import count_parameters
 
 ###################################################################################################################################################
@@ -117,26 +117,30 @@ class ModelTrainHandler(object):
 						text = f'[{set_name}]'
 
 					evaluated = True
-					set_loss = []
-					set_metrics_dict = {mn:[] for mn in lmonitor.get_metric_names()}
+					out_tdict = []
 					for ki,in_tdict in enumerate(set_loader): # batches loop
 						#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
-						out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs)
+						out_tdict_ = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs)
 						#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
-						set_loss.append(lmonitor.loss(out_tdict, **training_kwargs))
-						for metric in lmonitor.metrics:
-							set_metrics_dict[metric.name].append(metric(out_tdict, **training_kwargs))
+						out_tdict.append(out_tdict_)
+
+					out_tdict = minibatch_dict_collate(out_tdict)
 
 					### save loss to history & bar text
-					set_loss = sum(set_loss)/len(set_loss)
+					set_loss = lmonitor.loss(out_tdict, **training_kwargs)
 					## SET LOSS TO HYSTORY
 					lmonitor.add_loss_history_epoch(set_loss, lmonitor_cr.dt(), set_name)
 					text += f'[{lmonitor.name}] __loss__: {str(set_loss)}'
 
 					### save metrics to history & bar text
-					set_metrics_dict = {mn:sum(set_metrics_dict[mn])/len(set_metrics_dict[mn]) for mn in lmonitor.get_metric_names()}
-					for mn in lmonitor.get_metric_names():
-						text += f' - {mn}: {str(set_metrics_dict[mn])}'
+					set_metrics_dict = {}
+					for metric in lmonitor.metrics:
+						metric_name = metric.name
+						out_metric = metric(out_tdict, **training_kwargs)
+						#print(set_name, ki, metric.name, out_metric)
+						text += f' - {metric_name}: {str(out_metric)}'
+						set_metrics_dict[metric_name] = out_metric
+
 					lmonitor.add_metric_history_epoch(set_metrics_dict, lmonitor_cr.dt(), set_name)
 
 					text += f' {lmonitor_cr}'
@@ -174,6 +178,9 @@ class ModelTrainHandler(object):
 		self.delete_filedirs()
 
 		### TRAINING - BACKPROP
+		if self.uses_train_eval_loader_methods:
+			train_loader.train() # dataset train mode!
+
 		print(strings.get_bar())
 		ks_epochs = len(train_loader)
 		training_bar = ProgressBarMultiColor(self.epochs_max*ks_epochs, ['train', 'eval-train', 'eval-val', 'early-stop'], [None, 'blue', 'red', 'yellow'])

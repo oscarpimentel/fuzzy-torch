@@ -148,6 +148,8 @@ class SelfAttn(nn.Module):
 		keys = x.permute(1,0,2)
 		values = x.permute(1,0,2)
 		contexts, scores = self.mh_attn(queries, keys, values, **attn_kwargs)
+		scores = scores.cpu()
+		#print(scores.device)
 		#assert torch.all(scores.sum(dim=-1)>=0.99999)
 		x = contexts+self.res1_dropout_f(values) # res
 		x = x.permute(1,0,2)

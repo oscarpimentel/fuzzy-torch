@@ -59,6 +59,7 @@ def get_labels_accuracy(y_pred, y_target, labels):
 		valid_idxs = torch.where(y_target==k)
 		y_pred_k = y_pred[valid_idxs]
 		y_target_k = y_target[valid_idxs]
+		
 		accuracies = (y_target_k==y_pred_k).float()*100
 		if len(valid_idxs[0])>0:
 			labels_accuracies.append(torch.mean(accuracies)[None])

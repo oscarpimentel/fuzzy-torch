@@ -44,6 +44,9 @@ class LSTM(nn.Module):
 		self.in_dropout_f = nn.Dropout(self.in_dropout)
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
 
+	def reset(self):
+		pass
+		
 	def get_output_dims(self):
 		return self.output_dims
 
