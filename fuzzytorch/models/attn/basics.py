@@ -148,7 +148,7 @@ class SelfAttn(nn.Module):
 		keys = x.permute(1,0,2)
 		values = x.permute(1,0,2)
 		contexts, scores = self.mh_attn(queries, keys, values, **attn_kwargs)
-		scores = scores.cpu()
+		#scores = scores.cpu()
 		#print(scores.device)
 		#assert torch.all(scores.sum(dim=-1)>=0.99999)
 		x = contexts+self.res1_dropout_f(values) # res
@@ -245,7 +245,7 @@ class MLSelfAttn(nn.Module):
 		Return
 		----------
 		x: (b,t,out): output tensor.
-		layer_scores: list[(b,h,t,qt)]
+		layer_scores: (b,layers,h,t,qt)
 		'''
 		assert onehot.dtype==torch.bool
 		assert len(onehot.shape)==2
@@ -255,7 +255,9 @@ class MLSelfAttn(nn.Module):
 		layer_scores = []
 		for k,self_attn in enumerate(self.self_attns):
 			x, scores = self_attn(x, onehot, **kwargs)
-			layer_scores.append(scores)
+			layer_scores.append(scores[:,None,...])
+
+		layer_scores = torch.cat(layer_scores, dim=1)
 		return x, layer_scores
 
 	def __len__(self):
