@@ -53,6 +53,7 @@ class LossMonitor(object):
 		self.reset()
 
 	def reset(self):
+		self.best_value = None
 		self.loss_df = None
 		self.opt_df = None
 		self.loss_df_epoch = None
@@ -230,6 +231,7 @@ class LossMonitor(object):
 
 			if actual_loss<np.min(loss_history): # must save and delete
 				self.remove_filedir(self.last_saved_filedir) # remove last best model
+				self.best_value = actual_loss
 				return True
 			else:
 				return False
@@ -244,6 +246,7 @@ class LossMonitor(object):
 
 			if actual_metric<np.min(metric_history): # must save and delete
 				self.remove_filedir(self.last_saved_filedir) # remove last best model
+				self.best_value = actual_metric
 				return True
 			else:
 				return False
@@ -258,6 +261,7 @@ class LossMonitor(object):
 
 			if actual_metric>np.max(metric_history): # must save and delete
 				self.remove_filedir(self.last_saved_filedir) # remove last best model
+				self.best_value = actual_metric
 				return True
 			else:
 				return False

@@ -252,7 +252,7 @@ class ModelTrainHandler(object):
 					text = f'[stop]'
 					for lmonitor in self.lmonitors:
 						lmonitor.epoch_update() # update epoch
-						text += f'[{lmonitor.name}] counter_epoch: {lmonitor.counter_epoch}'
+						text += f'[{lmonitor.name}] counter_epoch: {lmonitor.counter_epoch}'+'' if lmonitor.self.best_value is None else f' (best: {lmonitor.best_value})'
 					bar_text_dic['early-stop'] = text
 					self.update_bar(training_bar, bar_text_dic, True)
 
