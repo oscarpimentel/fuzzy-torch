@@ -72,7 +72,7 @@ class LossResult():
 		):
 		numpy_loss = self.batch_loss.item()
 		if np.any(np.isnan(numpy_loss)) or np.any(numpy_loss==np.infty) or np.any(numpy_loss==-np.infty):
-			raise ex.NanLossException()
+			raise ex.NanLossError()
 		return numpy_loss if numpy else self.batch_loss
 
 	def get_subloss(self, name,

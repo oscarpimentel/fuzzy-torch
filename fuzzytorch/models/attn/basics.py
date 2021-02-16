@@ -138,8 +138,10 @@ class SelfAttn(nn.Module):
 		'''
 		self.register_src_mask(x.shape[1], x.device)
 
+		new_onehot = onehot.clone()
+		new_onehot[:,0] = True # forced to avoid errors of empty bands sequences
 		attn_kwargs = {
-			'key_padding_mask':~onehot,
+			'key_padding_mask':~new_onehot,
 			'attn_mask':self.src_mask,
 			'need_weights':True,
 		}
