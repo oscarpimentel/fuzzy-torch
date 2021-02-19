@@ -15,6 +15,7 @@ from flamingchoripan import lists as lists
 from .pytorch_multihead_clone import MultiheadAttention
 #from torch.nn import MultiheadAttention
 from .batch_norms import LayerNorm, MaskedBatchNorm1d
+from ..others import FILM
 
 ###################################################################################################################################################
 
@@ -256,6 +257,121 @@ class MLSelfAttn(nn.Module):
 
 		layer_scores = []
 		for k,self_attn in enumerate(self.self_attns):
+			x, scores = self_attn(x, onehot, **kwargs)
+			layer_scores.append(scores[:,None,...])
+
+		layer_scores = torch.cat(layer_scores, dim=1)
+		return x, layer_scores
+
+	def __len__(self):
+		return utils.count_parameters(self)
+
+	def __repr__(self):
+		resume = ''
+		for k,self_attn in enumerate(self.self_attns):
+			resume += f'  ({k}) - {str(self_attn)}\n'
+		txt = f'MLSelfAttn(\n{resume})({len(self):,}[p])'
+		return txt
+
+###################################################################################################################################################
+
+class MLTimeSelfAttn(nn.Module):
+	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, te_features,
+		max_curve_length=None,
+		num_heads=2,
+		activation=C_.DEFAULT_ACTIVATION,
+		last_activation=C_.DEFAULT_LAST_ACTIVATION,
+		in_dropout=0.0,
+		dropout=0.0,
+		out_dropout=0.0,
+		attn_dropout=0.0,
+		bias=True,
+		uses_length_wise_batchnorm=1,
+		**kwargs):
+		super().__init__()
+
+		### CHECKS
+		assert in_dropout>=0 and in_dropout<=1
+		assert dropout>=0 and dropout<=1
+		assert out_dropout>=0 and out_dropout<=1
+		assert attn_dropout>=0 and attn_dropout<=1
+
+		self.input_dims = input_dims
+		self.output_dims = output_dims
+		self.embd_dims_list = [self.input_dims]+embd_dims_list+[self.output_dims]
+		self.te_features = te_features
+		self.max_curve_length = max_curve_length
+		self.num_heads = num_heads
+		self.activation = activation
+		self.last_activation = last_activation
+		self.in_dropout = in_dropout
+		self.dropout = dropout
+		self.out_dropout = out_dropout
+		self.attn_dropout = attn_dropout
+		self.bias = bias
+		self.uses_length_wise_batchnorm = uses_length_wise_batchnorm
+
+		activations = [activation]*(len(self.embd_dims_list)-1) # create activations along
+		if not self.last_activation is None:
+			activations[-1] = self.last_activation
+
+		### MODULES
+		self.self_attns = nn.ModuleList()
+		self.te_films = nn.ModuleList()
+		for k in range(len(self.embd_dims_list)-1):
+			input_dims_ = self.embd_dims_list[k]
+			output_dims_ = self.embd_dims_list[k+1]
+			attn_kwargs = {
+				'max_curve_length':self.max_curve_length,
+				'num_heads':self.num_heads,
+				'activation':activations[k],
+				'in_dropout':self.in_dropout if k==0 else self.dropout,
+				'out_dropout':self.out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
+				'attn_dropout':self.attn_dropout,
+				'bias':self.bias,
+				'uses_length_wise_batchnorm':self.uses_length_wise_batchnorm,
+			}
+			self_attn = SelfAttn(input_dims_, output_dims_, **attn_kwargs)
+			self.self_attns.append(self_attn)
+			self.te_films.append(FILM(self.te_features, input_dims_))
+
+		self.reset()
+
+	def reset(self):
+		for self_attn in self.self_attns:
+			self_attn.reset()
+
+	def __len__(self):
+		return utils.count_parameters(self)
+
+	def __repr__(self):
+		resume = ''
+		for k,self_attn in enumerate(self.self_attns):
+			resume += f'  ({k}) - {str(self_attn)}\n'
+		txt = f'MLSelfAttn(\n{resume})({len(self):,}[p])'
+		return txt
+
+	def forward(self, x, onehot, te, **kwargs):
+		'''
+		Parameters
+		----------
+		x (b,t,in): input tensor.
+		onehot (b,t)
+
+		Return
+		----------
+		x: (b,t,out): output tensor.
+		layer_scores: (b,layers,h,t,qt)
+		'''
+		assert onehot.dtype==torch.bool
+		assert len(onehot.shape)==2
+		assert x.shape[:-1]==onehot.shape
+		assert len(x.shape)==3
+
+		layer_scores = []
+		for k,self_attn in enumerate(self.self_attns):
+			te_film = self.te_films[k]
+			x = te_film(x, te)
 			x, scores = self_attn(x, onehot, **kwargs)
 			layer_scores.append(scores[:,None,...])
 
