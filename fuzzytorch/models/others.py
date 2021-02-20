@@ -111,6 +111,9 @@ class TemporalEncoding(nn.Module):
 	def get_output_dims(self):
 		return len(self.te_periods)*2
 
+	def get_te_periods(self):
+		return self.te_periods
+
 	def forward(self, time, **kwargs):
 		# time (b,t)
 		assert len(time.shape)==2
