@@ -15,7 +15,7 @@ from flamingchoripan import lists as lists
 from .pytorch_multihead_clone import MultiheadAttention
 #from torch.nn import MultiheadAttention
 from .batch_norms import LayerNorm, MaskedBatchNorm1d
-from ..others import FILM
+from ..others import FILM, TemporalEncoding
 
 ###################################################################################################################################################
 
@@ -228,6 +228,9 @@ class MLSelfAttn(nn.Module):
 		for self_attn in self.self_attns:
 			self_attn.reset()
 
+	def get_embd_dims_list(self):
+		return self.embd_dims_list
+
 	def __len__(self):
 		return utils.count_parameters(self)
 
@@ -255,13 +258,13 @@ class MLSelfAttn(nn.Module):
 		assert x.shape[:-1]==onehot.shape
 		assert len(x.shape)==3
 
-		layer_scores = []
+		layers_scores = []
 		for k,self_attn in enumerate(self.self_attns):
-			x, scores = self_attn(x, onehot, **kwargs)
-			layer_scores.append(scores[:,None,...])
+			x, layer_scores = self_attn(x, onehot, **kwargs)
+			layers_scores.append(layer_scores[:,None,...])
 
-		layer_scores = torch.cat(layer_scores, dim=1)
-		return x, layer_scores
+		layers_scores = torch.cat(layers_scores, dim=1)
+		return x, layers_scores
 
 	def __len__(self):
 		return utils.count_parameters(self)
@@ -276,7 +279,7 @@ class MLSelfAttn(nn.Module):
 ###################################################################################################################################################
 
 class MLTimeSelfAttn(nn.Module):
-	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, te_features,
+	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, te_features, max_te_period,
 		max_curve_length=None,
 		num_heads=2,
 		activation=C_.DEFAULT_ACTIVATION,
@@ -300,6 +303,7 @@ class MLTimeSelfAttn(nn.Module):
 		self.output_dims = output_dims
 		self.embd_dims_list = [self.input_dims]+embd_dims_list+[self.output_dims]
 		self.te_features = te_features
+		self.max_te_period = max_te_period
 		self.max_curve_length = max_curve_length
 		self.num_heads = num_heads
 		self.activation = activation
@@ -316,6 +320,9 @@ class MLTimeSelfAttn(nn.Module):
 			activations[-1] = self.last_activation
 
 		### MODULES
+		self.te_mod = TemporalEncoding(self.te_features, self.max_te_period)
+		print('te_mod:',self.te_mod)
+
 		self.self_attns = nn.ModuleList()
 		self.te_films = nn.ModuleList()
 		for k in range(len(self.embd_dims_list)-1):
@@ -333,13 +340,20 @@ class MLTimeSelfAttn(nn.Module):
 			}
 			self_attn = SelfAttn(input_dims_, output_dims_, **attn_kwargs)
 			self.self_attns.append(self_attn)
-			self.te_films.append(FILM(self.te_features, input_dims_))
+			film_kwargs = {
+				#'in_dropout':self.dropout,
+			}
+			film = FILM(self.te_features, input_dims_, **film_kwargs)
+			self.te_films.append(film)
 
 		self.reset()
 
 	def reset(self):
 		for self_attn in self.self_attns:
 			self_attn.reset()
+
+	def get_embd_dims_list(self):
+		return self.embd_dims_list
 
 	def __len__(self):
 		return utils.count_parameters(self)
@@ -351,12 +365,13 @@ class MLTimeSelfAttn(nn.Module):
 		txt = f'MLSelfAttn(\n{resume})({len(self):,}[p])'
 		return txt
 
-	def forward(self, x, onehot, te, **kwargs):
+	def forward(self, x, onehot, time, **kwargs):
 		'''
 		Parameters
 		----------
 		x (b,t,in): input tensor.
 		onehot (b,t)
+		time (b,t)
 
 		Return
 		----------
@@ -367,16 +382,17 @@ class MLTimeSelfAttn(nn.Module):
 		assert len(onehot.shape)==2
 		assert x.shape[:-1]==onehot.shape
 		assert len(x.shape)==3
+		assert len(time.shape)==2
 
-		layer_scores = []
-		for k,self_attn in enumerate(self.self_attns):
-			te_film = self.te_films[k]
+		te = self.te_mod(time)
+		layers_scores = []
+		for k,(te_film,self_attn) in enumerate(zip(self.te_films, self.self_attns)):
 			x = te_film(x, te)
-			x, scores = self_attn(x, onehot, **kwargs)
-			layer_scores.append(scores[:,None,...])
+			x, layer_scores = self_attn(x, onehot, **kwargs)
+			layers_scores.append(layer_scores[:,None,...])
 
-		layer_scores = torch.cat(layer_scores, dim=1)
-		return x, layer_scores
+		layers_scores = torch.cat(layers_scores, dim=1)
+		return x, layers_scores
 
 	def __len__(self):
 		return utils.count_parameters(self)
