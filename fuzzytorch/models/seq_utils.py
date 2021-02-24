@@ -7,15 +7,20 @@ import numpy as np
 
 ###################################################################################################################################################
 
+def check_(x, onehot):
+	assert onehot.dtype==torch.bool
+	assert len(onehot.shape)==2
+	assert x.shape[:-1]==onehot.shape
+	assert len(x.shape)==3
+
+###################################################################################################################################################
+
 def seq_clean(x, onehot):
 	'''
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	assert onehot.dtype==torch.bool
-	assert len(onehot.shape)==2
-	assert x.shape[:-1]==onehot.shape
-	assert len(x.shape)==3
+	check_(x, onehot)
 
 	x = x.masked_fill(~onehot[...,None], 0) # clean using onehot
 	return x
@@ -25,10 +30,7 @@ def seq_avg_pooling(x, onehot):
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	assert onehot.dtype==torch.bool
-	assert len(onehot.shape)==2
-	assert x.shape[:-1]==onehot.shape
-	assert len(x.shape)==3
+	check_(x, onehot)
 
 	x = seq_clean(x, onehot)
 	new_onehot = onehot.clone()
@@ -41,10 +43,7 @@ def seq_last_element(x, onehot):
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	assert onehot.dtype==torch.bool
-	assert len(onehot.shape)==2
-	assert x.shape[:-1]==onehot.shape
-	assert len(x.shape)==3
+	check_(x, onehot)
 
 	b,t,f = x.size()
 	indexs = torch.sum(onehot[...,None], dim=1)-1 # (b,t,1) > (b,1) # -1 because index is always 1 unit less than length
@@ -53,15 +52,27 @@ def seq_last_element(x, onehot):
 	last_x = last_x[:,0,:]
 	return last_x
 
+def seq_min_pooling(x, onehot):
+	'''
+	x (b,t,f)
+	onehot (b,t)
+	'''
+	check_(x, onehot)
+
+	b,t,f = x.size()
+	new_onehot = onehot.clone()
+	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
+	infty = 1/C_.EPS
+	x = x.masked_fill(~new_onehot[...,None], +infty) # clean using onehot
+	x,_ = torch.min(x, dim=1)
+	return x
+
 def seq_max_pooling(x, onehot):
 	'''
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	assert onehot.dtype==torch.bool
-	assert len(onehot.shape)==2
-	assert x.shape[:-1]==onehot.shape
-	assert len(x.shape)==3
+	check_(x, onehot)
 
 	b,t,f = x.size()
 	new_onehot = onehot.clone()
@@ -81,6 +92,32 @@ def get_seq_onehot_mask(seqlengths, max_seqlength,
 	mask = torch.arange(max_seqlength).expand(batch_size, max_seqlength).to(seqlengths.device if device is None else device)
 	mask = (mask < seqlengths[...,None])
 	return mask.bool() # (b,t)
+
+###################################################################################################################################################
+
+def seq_min_max_norm(x, onehot):
+	'''
+	x (b,t,f)
+	onehot (b,t)
+	'''
+	check_(x, onehot)
+
+	min_ = seq_min_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
+	max_ = seq_max_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
+	#print(min_, max_)
+	diff_ = max_-min_
+	return (x-min_)/(diff_+C_.EPS)
+
+def seq_avg_norm(x, onehot):
+	'''
+	x (b,t,f)
+	onehot (b,t)
+	'''
+	check_(x, onehot)
+	assert torch.all(x>=0)
+
+	avg_ = seq_avg_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
+	return x/(avg_+C_.EPS)
 
 ###################################################################################################################################################
 
@@ -109,10 +146,7 @@ def serial_to_parallel(x, onehot,
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	assert onehot.dtype==torch.bool
-	assert len(onehot.shape)==2
-	assert x.shape[:-1]==onehot.shape
-	assert len(x.shape)==3
+	check_(x, onehot)
 
 	IMD = onehot.shape[1]
 	s2p_mapping_indexs = (torch.cumsum(onehot, 1)-1).masked_fill(~onehot, IMD)

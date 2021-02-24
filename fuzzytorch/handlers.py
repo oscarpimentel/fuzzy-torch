@@ -122,7 +122,7 @@ class ModelTrainHandler(object):
 						#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
 						out_tdict_ = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs)
 						#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
-						out_tdict_ = TDictHolder(out_tdict_).to('cpu')
+						out_tdict_ = TDictHolder(out_tdict_).to('cpu') # cpu to save gpu memory
 						out_tdict.append(out_tdict_)
 
 					out_tdict = minibatch_dict_collate(out_tdict)
