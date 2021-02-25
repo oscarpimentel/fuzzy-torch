@@ -32,10 +32,23 @@ def seq_avg_pooling(x, onehot):
 	'''
 	check_(x, onehot)
 
-	x = seq_clean(x, onehot)
+	x = seq_clean(x, onehot) # important
 	new_onehot = onehot.clone()
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
-	x = x.sum(dim=1)/new_onehot.sum(dim=1)[...,None] # (b,t,f) > (b,f)
+	x = x.sum(dim=1)/(new_onehot.sum(dim=1)[...,None]) # (b,t,f) > (b,f)
+	return x
+
+def seq_sum_pooling(x, onehot):
+	'''
+	x (b,t,f)
+	onehot (b,t)
+	'''
+	check_(x, onehot)
+
+	x = seq_clean(x, onehot) # important
+	new_onehot = onehot.clone()
+	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
+	x = x.sum(dim=1) # (b,t,f) > (b,f)
 	return x
 
 def seq_last_element(x, onehot):
@@ -118,6 +131,17 @@ def seq_avg_norm(x, onehot):
 
 	avg_ = seq_avg_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
 	return x/(avg_+C_.EPS)
+
+def seq_sum_norm(x, onehot):
+	'''
+	x (b,t,f)
+	onehot (b,t)
+	'''
+	check_(x, onehot)
+	assert torch.all(x>=0)
+
+	sum_ = seq_sum_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
+	return x/(sum_+C_.EPS)
 
 ###################################################################################################################################################
 
