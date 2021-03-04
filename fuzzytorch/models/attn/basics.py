@@ -89,6 +89,8 @@ class SelfAttn(nn.Module):
 		self.reset()
 
 	def reset(self):
+		self.error_a = torch.nn.Parameter(torch.tensor(1.), requires_grad=True)
+		self.error_b = torch.nn.Parameter(torch.tensor(0.), requires_grad=True)
 		pass
 
 	def register_src_mask(self, max_curve_length, device):
@@ -141,16 +143,29 @@ class SelfAttn(nn.Module):
 
 		new_onehot = onehot.clone()
 		new_onehot[:,0] = True # forced to avoid errors of empty bands sequences
+
+		#print(self.src_mask.shape, self.src_mask)
+		error = kwargs['error'].permute(0,2,1)
+		assert torch.all(error>=0) 
+		#print(error.shape)
+		error_mask = error.repeat(self.num_heads, x.shape[1], 1)
+		#print(error_mask.shape, error_mask)
+		mul_attn_mask = 1-torch.sigmoid(torch.log(torch.exp(self.error_a)+C_.EPS)*error_mask+self.error_b)
+
 		attn_kwargs = {
 			'key_padding_mask':~new_onehot,
 			'attn_mask':self.src_mask,
+			'mul_attn_mask':mul_attn_mask,
 			'need_weights':True,
 		}
+		
 		x = self.in_dropout_f(x)
 		queries = x.permute(1,0,2)
 		keys = x.permute(1,0,2)
 		values = x.permute(1,0,2)
 		contexts, scores = self.mh_attn(queries, keys, values, **attn_kwargs)
+		#assert 0
+		
 		#scores = scores.cpu()
 		#print(scores.device)
 		#assert torch.all(scores.sum(dim=-1)>=0.99999)
@@ -278,7 +293,7 @@ class MLSelfAttn(nn.Module):
 
 ###################################################################################################################################################
 
-class MLTimeSelfAttn(nn.Module):
+class MLTimeErrorSelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, te_features, max_te_period,
 		max_curve_length=None,
 		num_heads=2,
@@ -362,7 +377,7 @@ class MLTimeSelfAttn(nn.Module):
 		resume = ''
 		for k,self_attn in enumerate(self.self_attns):
 			resume += f'  ({k}) - {str(self_attn)}\n'
-		txt = f'MLSelfAttn(\n{resume})({len(self):,}[p])'
+		txt = f'MLTimeErrorSelfAttn(\n{resume})({len(self):,}[p])'
 		return txt
 
 	def forward(self, x, onehot, time, **kwargs):

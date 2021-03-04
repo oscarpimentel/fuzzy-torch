@@ -81,8 +81,12 @@ class MultiheadAttention(Module):
 		if 'self._qkv_same_embed_dim' not in self.__dict__:
 			self._qkv_same_embed_dim = True
 
-	def forward(self, query, key, value, key_padding_mask=None,
-				need_weights=True, attn_mask=None):
+	def forward(self, query, key, value,
+		key_padding_mask=None,
+		need_weights=True,
+		attn_mask=None,
+		mul_attn_mask=None,
+		):
 
 		#print(self.uses_query_eye);print(self.q_proj_weight)
 		#print('_qkv_same_embed_dim',self._qkv_same_embed_dim)
@@ -94,8 +98,11 @@ class MultiheadAttention(Module):
 				self.dropout, self.out_proj.weight, self.out_proj.bias,
 				training=self.training,
 				key_padding_mask=key_padding_mask, need_weights=need_weights,
-				attn_mask=attn_mask, use_separate_proj_weight=True,
-				q_proj_weight=self.q_proj_weight, k_proj_weight=self.k_proj_weight,
+				attn_mask=attn_mask,
+				mul_attn_mask=mul_attn_mask,
+				use_separate_proj_weight=True,
+				q_proj_weight=self.q_proj_weight,
+				k_proj_weight=self.k_proj_weight,
 				v_proj_weight=self.v_proj_weight)
 		else:
 			return multi_head_attention_forward(
@@ -105,7 +112,9 @@ class MultiheadAttention(Module):
 				self.dropout, self.out_proj.weight, self.out_proj.bias,
 				training=self.training,
 				key_padding_mask=key_padding_mask, need_weights=need_weights,
-				attn_mask=attn_mask)
+				attn_mask=attn_mask,
+				mul_attn_mask=mul_attn_mask,
+				)
 
 
 def multi_head_attention_forward(query,                           # type: Tensor
@@ -125,6 +134,7 @@ def multi_head_attention_forward(query,                           # type: Tensor
 								 key_padding_mask=None,           # type: Optional[Tensor]
 								 need_weights=True,               # type: bool
 								 attn_mask=None,                  # type: Optional[Tensor]
+								 mul_attn_mask=None,
 								 use_separate_proj_weight=False,  # type: bool
 								 q_proj_weight=None,              # type: Optional[Tensor]
 								 k_proj_weight=None,              # type: Optional[Tensor]
@@ -329,6 +339,11 @@ def multi_head_attention_forward(query,                           # type: Tensor
 
 	attn_output_weights = torch.bmm(q, k.transpose(1, 2))
 	assert list(attn_output_weights.size()) == [bsz * num_heads, tgt_len, src_len]
+
+	if mul_attn_mask is not None:
+		#print(attn_output_weights.shape)
+		#mul_attn_mask = mul_attn_mask.unsqueeze(0)
+		attn_output_weights *= mul_attn_mask
 
 	if attn_mask is not None:
 		attn_mask = attn_mask.unsqueeze(0)
