@@ -301,6 +301,7 @@ def multi_head_attention_forward(query,                           # type: Tensor
 		assert bias_k is None
 		assert bias_v is None
 
+	#print(q.shape)
 	q = q.contiguous().view(tgt_len, bsz * num_heads, head_dim).transpose(0, 1)
 	if k is not None:
 		k = k.contiguous().view(-1, bsz * num_heads, head_dim).transpose(0, 1)
@@ -343,7 +344,9 @@ def multi_head_attention_forward(query,                           # type: Tensor
 	if mul_attn_mask is not None:
 		#print(attn_output_weights.shape)
 		#mul_attn_mask = mul_attn_mask.unsqueeze(0)
-		attn_output_weights *= mul_attn_mask
+		#print(attn_output_weights.shape, mul_attn_mask.shape)
+		attn_output_weights = torch.clamp(attn_output_weights, 0, None) # all weights need to be positive positive
+		attn_output_weights *= mul_attn_mask.view(bsz * num_heads, tgt_len, tgt_len) # (b,h,t,t) > (b*h,t,t)
 
 	if attn_mask is not None:
 		attn_mask = attn_mask.unsqueeze(0)
