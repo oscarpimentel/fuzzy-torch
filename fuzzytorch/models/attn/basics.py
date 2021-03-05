@@ -16,6 +16,8 @@ from .pytorch_multihead_clone import MultiheadAttention
 #from torch.nn import MultiheadAttention
 from .batch_norms import LayerNorm, MaskedBatchNorm1d
 from ..others import FILM, TemporalEncoding
+from .. import seq_utils as seq_utils
+import numpy as np
 
 ###################################################################################################################################################
 
@@ -89,8 +91,6 @@ class SelfAttn(nn.Module):
 		self.reset()
 
 	def reset(self):
-		self.error_a = torch.nn.Parameter(torch.tensor([1.]*self.num_heads), requires_grad=True)
-		self.error_b = torch.nn.Parameter(torch.tensor([0.]*self.num_heads), requires_grad=True)
 		pass
 
 	def register_src_mask(self, max_curve_length, device):
@@ -127,7 +127,9 @@ class SelfAttn(nn.Module):
 		txt += f'({len(self):,}[p])'
 		return txt
 
-	def forward(self, x, onehot, **kwargs):
+	def forward(self, x, onehot,
+		mul_attn_mask=None,
+		**kwargs):
 		'''
 		Parameters
 		----------
@@ -144,23 +146,12 @@ class SelfAttn(nn.Module):
 		new_onehot = onehot.clone()
 		new_onehot[:,0] = True # forced to avoid errors of empty bands sequences
 
-		#print(self.src_mask.shape, self.src_mask)
-		error = kwargs['error']
-		assert torch.all(error>=0) 
-		#print(error.shape)
-		error = error.permute(0,2,1)[:,None,...] # (b,t,1) > (b,1,1,t)
-		error_mask = error.repeat(1, self.num_heads, x.shape[1], 1) # (b,h,t,t)
-		#print(error_mask.shape, error_mask)
-		pos_a = torch.log(torch.exp(self.error_a)+C_.EPS)
-		mul_attn_mask = 1-torch.sigmoid(pos_a[None,:,None,None]*error_mask+self.error_b[None,:,None,None])
-
 		attn_kwargs = {
 			'key_padding_mask':~new_onehot,
 			'attn_mask':self.src_mask,
 			'mul_attn_mask':mul_attn_mask,
 			'need_weights':True,
 		}
-		
 		x = self.in_dropout_f(x)
 		queries = x.permute(1,0,2)
 		keys = x.permute(1,0,2)
@@ -237,7 +228,7 @@ class MLSelfAttn(nn.Module):
 				'uses_length_wise_batchnorm':self.uses_length_wise_batchnorm,
 			}
 			self_attn = SelfAttn(input_dims_, output_dims_, **attn_kwargs)
-			self.self_attns.append(self_attn)
+			self.self_attns += [self_attn]
 
 		self.reset()
 
@@ -268,7 +259,7 @@ class MLSelfAttn(nn.Module):
 		Return
 		----------
 		x: (b,t,out): output tensor.
-		layer_scores: (b,layers,h,t,qt)
+		layers_scores: (b,layers,h,t,qt)
 		'''
 		assert onehot.dtype==torch.bool
 		assert len(onehot.shape)==2
@@ -278,7 +269,7 @@ class MLSelfAttn(nn.Module):
 		layers_scores = []
 		for k,self_attn in enumerate(self.self_attns):
 			x, layer_scores = self_attn(x, onehot, **kwargs)
-			layers_scores.append(layer_scores[:,None,...])
+			layers_scores += [layer_scores[:,None,...]]
 
 		layers_scores = torch.cat(layers_scores, dim=1)
 		return x, layers_scores
@@ -294,6 +285,76 @@ class MLSelfAttn(nn.Module):
 		return txt
 
 ###################################################################################################################################################
+
+class TimeErrorSelfAttn(SelfAttn):
+	def __init__(self, input_dims:int, output_dims:int,
+		max_curve_length=None,
+		num_heads=2,
+		activation='linear',
+		in_dropout=0.0,
+		out_dropout=0.0,
+		attn_dropout=0.0,
+		mlp_dropout=0.0,
+		residual_dropout=0.0,
+		bias=True,
+		uses_length_wise_batchnorm=1,
+		**kwargs):
+		super().__init__(
+			input_dims, output_dims,
+			max_curve_length,
+			num_heads,
+			activation,
+			in_dropout,
+			out_dropout,
+			attn_dropout,
+			mlp_dropout,
+			residual_dropout,
+			bias,
+			uses_length_wise_batchnorm,
+			**kwargs
+			)
+		self.error_a = torch.nn.Parameter(torch.tensor([.1]*self.num_heads), requires_grad=True)
+		self.error_b = torch.nn.Parameter(torch.tensor([0.]*self.num_heads), requires_grad=True)
+		self.min_error = np.infty
+		self.max_error = -np.infty
+		#self.min_error = 0
+		#self.max_error = 0.05
+
+	def forward(self, x, onehot, error,
+		**kwargs):
+		#print(self.src_mask.shape, self.src_mask)
+		assert torch.all(error>=0)
+		#print(error.shape, error)
+
+		if self.training:
+			min_error = torch.min(seq_utils.seq_min_pooling(error, onehot)).item()
+			self.min_error = min_error if min_error<self.min_error else self.min_error
+			max_error = torch.max(seq_utils.seq_max_pooling(error, onehot)).item()
+			self.max_error = max_error if max_error>self.max_error else self.max_error
+			pass
+		else:
+			#print(self.error_a, self.error_b)
+			pass
+
+		error = error.permute(0,2,1)[:,None,...] # (b,t,1) > (b,1,1,t)
+		error_mask = error.repeat(1, self.num_heads, x.shape[1], 1) # (b,h,t,t)
+		#print(error_mask.shape, error_mask)
+		pos_error_a = torch.log(torch.exp(self.error_a)+C_.EPS)
+		#pos_error_a = torch.clamp(self.error_a, C_.EPS, None)
+		error_b = self.error_b
+		error_mask = 2*(error_mask-self.min_error)/(self.max_error-self.min_error)-1
+		mul_attn_mask = 1-torch.sigmoid(pos_error_a[None,:,None,None]*error_mask+self.error_b[None,:,None,None])
+		#mul_attn_mask = 1-torch.sigmoid(pos_error_a[None,:,None,None]*error_mask)
+		#mul_attn_mask = 1-torch.sigmoid(error_mask)
+
+		x, scores = super().forward(x, onehot, mul_attn_mask=mul_attn_mask, **kwargs)
+		extra_info = {
+			'min_error':self.min_error,
+			'max_error':self.max_error,
+			'pos_error_a':pos_error_a,
+			'error_b':error_b,
+		}
+		return x, scores, extra_info
 
 class MLTimeErrorSelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, te_features, max_te_period,
@@ -355,13 +416,13 @@ class MLTimeErrorSelfAttn(nn.Module):
 				'bias':self.bias,
 				'uses_length_wise_batchnorm':self.uses_length_wise_batchnorm,
 			}
-			self_attn = SelfAttn(input_dims_, output_dims_, **attn_kwargs)
-			self.self_attns.append(self_attn)
+			self_attn = TimeErrorSelfAttn(input_dims_, output_dims_, **attn_kwargs)
+			self.self_attns += [self_attn]
 			film_kwargs = {
 				#'in_dropout':self.dropout,
 			}
 			film = FILM(self.te_features, input_dims_, **film_kwargs)
-			self.te_films.append(film)
+			self.te_films += [film]
 
 		self.reset()
 
@@ -403,20 +464,12 @@ class MLTimeErrorSelfAttn(nn.Module):
 
 		te = self.te_mod(time)
 		layers_scores = []
+		extra_infos = []
 		for k,(te_film,self_attn) in enumerate(zip(self.te_films, self.self_attns)):
 			x = te_film(x, te)
-			x, layer_scores = self_attn(x, onehot, **kwargs)
-			layers_scores.append(layer_scores[:,None,...])
+			x, layer_scores, extra_info = self_attn(x, onehot, **kwargs)
+			layers_scores += [layer_scores[:,None,...]]
+			extra_infos += [extra_info]
 
 		layers_scores = torch.cat(layers_scores, dim=1)
-		return x, layers_scores
-
-	def __len__(self):
-		return utils.count_parameters(self)
-
-	def __repr__(self):
-		resume = ''
-		for k,self_attn in enumerate(self.self_attns):
-			resume += f'  ({k}) - {str(self_attn)}\n'
-		txt = f'MLSelfAttn(\n{resume})({len(self):,}[p])'
-		return txt
+		return x, layers_scores, extra_infos
