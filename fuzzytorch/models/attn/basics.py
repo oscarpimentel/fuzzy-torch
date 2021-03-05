@@ -313,7 +313,7 @@ class TimeErrorSelfAttn(SelfAttn):
 			uses_length_wise_batchnorm,
 			**kwargs
 			)
-		self.error_a = torch.nn.Parameter(torch.tensor([.1]*self.num_heads), requires_grad=True)
+		self.error_a = torch.nn.Parameter(torch.tensor([.999]*self.num_heads), requires_grad=True)
 		self.error_b = torch.nn.Parameter(torch.tensor([0.]*self.num_heads), requires_grad=True)
 		self.min_error = np.infty
 		self.max_error = -np.infty
@@ -324,6 +324,7 @@ class TimeErrorSelfAttn(SelfAttn):
 		**kwargs):
 		#print(self.src_mask.shape, self.src_mask)
 		assert torch.all(error>=0)
+		error = error[...,None]
 		#print(error.shape, error)
 
 		if self.training:
@@ -443,7 +444,7 @@ class MLTimeErrorSelfAttn(nn.Module):
 		txt = f'MLTimeErrorSelfAttn(\n{resume})({len(self):,}[p])'
 		return txt
 
-	def forward(self, x, onehot, time, **kwargs):
+	def forward(self, x, onehot, time, error, **kwargs):
 		'''
 		Parameters
 		----------
@@ -467,7 +468,7 @@ class MLTimeErrorSelfAttn(nn.Module):
 		extra_infos = []
 		for k,(te_film,self_attn) in enumerate(zip(self.te_films, self.self_attns)):
 			x = te_film(x, te)
-			x, layer_scores, extra_info = self_attn(x, onehot, **kwargs)
+			x, layer_scores, extra_info = self_attn(x, onehot, error, **kwargs)
 			layers_scores += [layer_scores[:,None,...]]
 			extra_infos += [extra_info]
 
