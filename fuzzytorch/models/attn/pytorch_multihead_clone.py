@@ -347,9 +347,10 @@ def multi_head_attention_forward(query,                           # type: Tensor
 		#print(attn_output_weights.shape, mul_attn_mask.shape)
 		attn_output_weights = attn_output_weights.view(bsz, num_heads, tgt_len, src_len)
 		#attn_output_weights = torch.clamp(attn_output_weights, 0, None) # all weights need to be positive positive
-		attn_output_weights = torch.log(torch.exp(attn_output_weights)+1e-10) # all weights need to be positive positive
+		#attn_output_weights = torch.log(torch.exp(attn_output_weights)+1e-5) # all weights need to be positive positive
+		attn_output_weights = torch.sqrt(attn_output_weights**2+1e-5) # all weights need to be positive positive
 		#print(mul_attn_mask[0,0])
-		attn_output_weights *= mul_attn_mask
+		attn_output_weights = attn_output_weights*mul_attn_mask # not inplace
 		attn_output_weights = attn_output_weights.view(bsz * num_heads, tgt_len, src_len)
 
 	if attn_mask is not None:

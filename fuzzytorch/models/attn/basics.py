@@ -313,7 +313,7 @@ class TimeErrorSelfAttn(SelfAttn):
 			uses_length_wise_batchnorm,
 			**kwargs
 			)
-		self.error_a = torch.nn.Parameter(torch.tensor([.999]*self.num_heads), requires_grad=True)
+		self.error_a = torch.nn.Parameter(torch.tensor([1.]*self.num_heads), requires_grad=True)
 		self.error_b = torch.nn.Parameter(torch.tensor([0.]*self.num_heads), requires_grad=True)
 		self.min_error = np.infty
 		self.max_error = -np.infty
@@ -340,10 +340,11 @@ class TimeErrorSelfAttn(SelfAttn):
 		error = error.permute(0,2,1)[:,None,...] # (b,t,1) > (b,1,1,t)
 		error_mask = error.repeat(1, self.num_heads, x.shape[1], 1) # (b,h,t,t)
 		#print(error_mask.shape, error_mask)
-		pos_error_a = torch.log(torch.exp(self.error_a)+C_.EPS)
+		#pos_error_a = torch.log(torch.exp(self.error_a)+C_.EPS)
+		pos_error_a = torch.sqrt(self.error_a**2+C_.EPS)
 		#pos_error_a = torch.clamp(self.error_a, C_.EPS, None)
 		error_b = self.error_b
-		error_mask = 2*(error_mask-self.min_error)/(self.max_error-self.min_error)-1
+		#error_mask = 2*(error_mask-self.min_error)/(self.max_error-self.min_error)-1 # norm [-1,1]
 		mul_attn_mask = 1-torch.sigmoid(pos_error_a[None,:,None,None]*error_mask+self.error_b[None,:,None,None])
 		#mul_attn_mask = 1-torch.sigmoid(pos_error_a[None,:,None,None]*error_mask)
 		#mul_attn_mask = 1-torch.sigmoid(error_mask)

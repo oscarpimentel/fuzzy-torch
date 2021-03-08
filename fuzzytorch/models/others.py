@@ -17,7 +17,7 @@ class FILM(nn.Module):
 	def __init__(self, mod_input_dims:int, mod_output_dims:int,
 		in_dropout=0.0,
 		out_dropout=0.0,
-		mod_dropout=0.1,
+		mod_dropout=0.0,
 		bias=True,
 		**kwargs):
 		super().__init__()
