@@ -345,7 +345,9 @@ class TimeErrorSelfAttn(SelfAttn):
 		#pos_error_a = torch.clamp(self.error_a, C_.EPS, None)
 		error_b = self.error_b
 		#error_mask = 2*(error_mask-self.min_error)/(self.max_error-self.min_error)-1 # norm [-1,1]
-		mul_attn_mask = 1-torch.sigmoid(pos_error_a[None,:,None,None]*error_mask+self.error_b[None,:,None,None])
+		
+		mul_attn_mask = None # dummy
+		#mul_attn_mask = 1-torch.sigmoid(pos_error_a[None,:,None,None]*error_mask+self.error_b[None,:,None,None])
 		#mul_attn_mask = 1-torch.sigmoid(pos_error_a[None,:,None,None]*error_mask)
 		#mul_attn_mask = 1-torch.sigmoid(error_mask)
 
