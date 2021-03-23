@@ -28,6 +28,7 @@ class ModelTrainHandler(object):
 		uses_train_eval_loader_methods=False,
 		delete_all_previous_epochs_files:bool=True,
 		extra_model_name_dict={},
+		evaluate_train=True,
 		):
 		### CHECKS
 		lmonitors = [lmonitors] if isinstance(lmonitors, mon.LossMonitor) else lmonitors
@@ -38,6 +39,8 @@ class ModelTrainHandler(object):
 		self.lmonitors = lmonitors
 		self.save_rootdir = save_rootdir
 		self.extra_model_name_dict = extra_model_name_dict.copy()
+		self.evaluate_train = evaluate_train
+
 		self.complete_save_roodir = self.get_complete_save_roodir()
 		self.id = id
 		self.epochs_max = int(epochs_max)
@@ -233,14 +236,17 @@ class ModelTrainHandler(object):
 						lmonitor.add_opt_history_epoch()
 
 					### evaluation in sets
-					text, evaluated = self.evaluate_in_set('train', train_loader, training_kwargs)
-					if evaluated:
-						bar_text_dic['eval-train'] = text
-						self.update_bar(training_bar, bar_text_dic)
+					if self.evaluate_train:
+						eval_set = 'train'
+						text, evaluated = self.evaluate_in_set(eval_set, train_loader, training_kwargs)
+						if evaluated:
+							bar_text_dic[f'eval-{eval_set}'] = text
+							self.update_bar(training_bar, bar_text_dic)
 
-					text, evaluated = self.evaluate_in_set('val', val_loader, training_kwargs)
+					eval_set = 'val'
+					text, evaluated = self.evaluate_in_set(eval_set, val_loader, training_kwargs)
 					if evaluated:
-						bar_text_dic['eval-val'] = text
+						bar_text_dic[f'eval-{eval_set}'] = text
 						self.update_bar(training_bar, bar_text_dic)
 
 					### saving model
