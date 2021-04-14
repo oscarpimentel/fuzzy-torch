@@ -22,7 +22,7 @@ from .models.utils import count_parameters
 
 class ModelTrainHandler(object):
 	def __init__(self, model, lmonitors:list,
-		save_rootdir='../save/',
+		save_rootdir='ft-save/',
 		id=0,
 		epochs_max=1e4,
 		uses_train_eval_loader_methods=False,
@@ -37,21 +37,44 @@ class ModelTrainHandler(object):
 
 		self.model = model
 		self.lmonitors = lmonitors
-		self.save_rootdir = save_rootdir
-		self.extra_model_name_dict = extra_model_name_dict.copy()
-		self.evaluate_train = evaluate_train
 
-		self.complete_save_roodir = self.get_complete_save_roodir()
+		self.save_rootdir = save_rootdir
 		self.id = id
 		self.epochs_max = int(epochs_max)
 		self.uses_train_eval_loader_methods = uses_train_eval_loader_methods
 		self.delete_all_previous_epochs_files = delete_all_previous_epochs_files
+		self.extra_model_name_dict = extra_model_name_dict.copy()
+		self.evaluate_train = evaluate_train
+		self.reset()		
+		
+	def reset(self):
+		self.get_model_name()
+		self.get_extra_model_name()
+		self.get_complete_model_name()
+		self.get_complete_save_roodir() # default save rootdir
 
 		self.device = 'cpu'
 		self.device_name = 'cpu'
 
+	def get_model_name(self):
+		self.model_name = self.model.get_name()
+		return self.model_name
+
+	def get_extra_model_name(self):
+		self.extra_model_name = None if len(self.extra_model_name_dict.keys())==0 else get_model_name(self.extra_model_name_dict)
+		return self.extra_model_name
+
+	def get_complete_model_name(self):
+		self.complete_model_name = f'{self.model_name}'
+		self.complete_model_name += '' if self.extra_model_name is None else f'{C_.KEY_KEY_SEP_CHAR}{self.extra_model_name}'
+		return self.complete_model_name
+
 	def get_complete_save_roodir(self):
-		return f'{self.save_rootdir}/{self.model.get_name()}'+('' if len(self.extra_model_name_dict.keys())==0 else f'{C_.KEY_KEY_SEP_CHAR}{get_model_name(self.extra_model_name_dict)}')
+		self.complete_save_roodir = f'{self.save_rootdir}/{self.complete_model_name}'
+		return self.complete_save_roodir
+
+	def set_complete_save_roodir(self, complete_save_roodir):
+		self.complete_save_roodir = complete_save_roodir
 
 	def clean_cache(self):
 		if self.uses_gpu:
@@ -72,10 +95,10 @@ class ModelTrainHandler(object):
 	def __repr__(self):
 		txt = ''
 		txt += strings.get_bar(char=C_fc.BOT_SQUARE_CHAR) + '\n'
-		txt += strings.color_str(f'model_name: {self.model.get_name()}({count_parameters(self.model):,}[p])', 'blue')+'\n'
-		txt += strings.color_str(f'id: {self.id}', 'blue')+'\n'
-		txt += strings.color_str(f'device: {self.device} - device_name: {self.device_name}', 'green')+'\n'
-		txt += f'save_rootdir: {self.complete_save_roodir}' + '\n'
+		txt += strings.color_str(f'model_name={self.model.get_name()}({count_parameters(self.model):,}[p])', 'blue')+'\n'
+		txt += strings.color_str(f'id={self.id}', 'blue')+'\n'
+		txt += strings.color_str(f'device={self.device} - device_name={self.device_name}', 'green')+'\n'
+		txt += f'save_rootdir={self.complete_save_roodir}' + '\n'
 		for lmonitor in self.lmonitors:
 			txt += str(lmonitor) + '\n'
 		return txt[:-1]
@@ -134,7 +157,7 @@ class ModelTrainHandler(object):
 					set_loss = lmonitor.loss(out_tdict, **training_kwargs)
 					## SET LOSS TO HYSTORY
 					lmonitor.add_loss_history_epoch(set_loss, lmonitor_cr.dt(), set_name)
-					text += f'[{lmonitor.name}] __loss__: {str(set_loss)}'
+					text += f'[{lmonitor.name}] _loss={str(set_loss)}'
 
 					### save metrics to history & bar text
 					set_metrics_dict = {}
@@ -142,7 +165,7 @@ class ModelTrainHandler(object):
 						metric_name = metric.name
 						out_metric = metric(out_tdict, **training_kwargs)
 						#print(set_name, ki, metric.name, out_metric)
-						text += f' - {metric_name}: {str(out_metric)}'
+						text += f' - {metric_name}={str(out_metric)}'
 						set_metrics_dict[metric_name] = out_metric
 
 					lmonitor.add_metric_history_epoch(set_metrics_dict, lmonitor_cr.dt(), set_name)
@@ -165,7 +188,7 @@ class ModelTrainHandler(object):
 			to_delete_filedirs = [f for f in files.get_filedirs(self.complete_save_roodir) if files.get_dict_from_filedir(f)['id']==str(self.id)]
 			if len(to_delete_filedirs)>0:
 				epochs_to_delete = [int(files.get_dict_from_filedir(f)['epoch']) for f in to_delete_filedirs]
-				prints.print_red(f'> (id: {self.id}) deleting previous epochs: {epochs_to_delete} in: {self.complete_save_roodir}')
+				prints.print_red(f'> (id={self.id}) deleting previous epochs={epochs_to_delete} in={self.complete_save_roodir}')
 				files.delete_filedirs(to_delete_filedirs, verbose=0)
 
 	def fit_loader(self, train_loader, val_loader,
@@ -202,7 +225,7 @@ class ModelTrainHandler(object):
 						train_loader.train() # dataset train mode!
 
 					for ki,in_tdict in enumerate(train_loader): # batches loop - k
-						backprop_text = f'id: {self.id} - epoch: {epoch:,}/{self.epochs_max:,}({ki:,}/{ks_epochs:,})'
+						backprop_text = f'id={self.id} - epoch={epoch:,}/{self.epochs_max:,}({ki:,}/{ks_epochs:,})'
 						losses_text_list = []
 						for kt,lmonitor in enumerate(self.lmonitors): # along train lmonitors
 							lmonitor_cr = times.Cronometer()
@@ -220,7 +243,7 @@ class ModelTrainHandler(object):
 
 							### save loss to history & bar text
 							lmonitor.add_loss_history_k(loss, lmonitor_cr.dt())
-							losses_text_list.append(f'[{lmonitor.name}] b: {len(loss):,} - __loss__: {str(loss)} {lmonitor_cr}')
+							losses_text_list.append(f'[{lmonitor.name}] b={len(loss):,} - _loss={str(loss)} {lmonitor_cr}')
 							lmonitor.k_update() # update k
 
 						if ki>0:
@@ -258,7 +281,7 @@ class ModelTrainHandler(object):
 					text = f'[stop]'
 					for lmonitor in self.lmonitors:
 						lmonitor.epoch_update() # update epoch
-						text += f'[{lmonitor.name}] counter_epoch: {lmonitor.counter_epoch}'+('' if lmonitor.best_value is None else f' (best: {lmonitor.best_value:.3f})')
+						text += f'[{lmonitor.name}] counter_epoch={lmonitor.counter_epoch}'+('' if lmonitor.best_value is None else f' (best={lmonitor.best_value:.3f})')
 					bar_text_dic['early-stop'] = text
 					self.update_bar(training_bar, bar_text_dic, True)
 
@@ -279,10 +302,10 @@ class ModelTrainHandler(object):
 		print(strings.get_bar())
 		print('End of training!!!')
 		for lmonitor in self.lmonitors:
-			txt = f'[{lmonitor.name}] best_epoch: {lmonitor.get_best_epoch()}'
-			txt += f' - time_per_iteration: {lmonitor.get_time_per_iteration()}[segs]'
-			txt += f' - time_per_epoch: {lmonitor.get_time_per_epoch()/60.}[mins]'
-			txt += f' - total_time: {lmonitor.get_total_time()/60.:3f}[mins]'
+			txt = f'[{lmonitor.name}] best_epoch={lmonitor.get_best_epoch()}'
+			txt += f' - time_per_iteration={lmonitor.get_time_per_iteration()}[segs]'
+			txt += f' - time_per_epoch={lmonitor.get_time_per_epoch()/60.}[mins]'
+			txt += f' - total_time={lmonitor.get_total_time()/60.:3f}[mins]'
 			print(txt)
 		print(strings.get_bar(char=C_fc.TOP_SQUARE_CHAR))
 		no_error_train = not end_with_nan
@@ -325,7 +348,7 @@ class ModelTrainHandler(object):
 			target_epoch = epochs[-1]
 
 		to_load_filedir = f'{self.complete_save_roodir}/id{C_.KEY_VALUE_SEP_CHAR}{target_id}{C_.KEY_KEY_SEP_CHAR}epoch{C_.KEY_VALUE_SEP_CHAR}{target_epoch}.{C_.SAVE_FEXT}'
-		prints.print_blue(f'> loading model: {to_load_filedir}')
+		prints.print_blue(f'> loading model={to_load_filedir}')
 
 		if map_location is None: # is GPU
 			loaded_dic = torch.load(to_load_filedir)

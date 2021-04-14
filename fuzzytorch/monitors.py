@@ -64,12 +64,12 @@ class LossMonitor(object):
 	### repr
 	def __repr__(self):
 		def get_metrics_repr():
-			return f' (target_metric_crit: {self.target_metric_crit})' if self.save_mode in [C_.SM_ONLY_INF_METRIC, C_.SM_ONLY_SUP_METRIC] else ''
+			return f' (target_metric_crit={self.target_metric_crit})' if self.save_mode in [C_.SM_ONLY_INF_METRIC, C_.SM_ONLY_SUP_METRIC] else ''
 		txt = ''
 		txt += f'[{self.name}]'+'\n'
-		txt += f' - opt-parameters: {len(self.optimizer):,}[p] - device: {self.optimizer.device()}'+'\n'
-		txt += f' - save-mode: {self.save_mode}{get_metrics_repr()}'+'\n'
-		txt += f' - counter_k: {self.counter_k} - counter_epoch: {self.counter_epoch}'+'\n'
+		txt += f' - opt-parameters={len(self.optimizer):,}[p] - device={self.optimizer.device()}'+'\n'
+		txt += f' - save-mode={self.save_mode}{get_metrics_repr()}'+'\n'
+		txt += f' - counter_k={self.counter_k} - counter_epoch={self.counter_epoch}'+'\n'
 		return txt[:-1]
 
 	def get_save_dict(self):

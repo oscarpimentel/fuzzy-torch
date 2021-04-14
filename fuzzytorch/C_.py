@@ -1,6 +1,6 @@
 import sys
 import numpy as np
-from flamingchoripan import C_ as C_fc
+from flamingchoripan import C_ as FCC_
 
 ###################################################################################################################################################
 
@@ -33,8 +33,8 @@ SM_ONLY_INF_METRIC = 'only_inf_metric'
 SM_ONLY_SUP_METRIC = 'only_sup_metric'
 
 SAVE_FEXT = 'tfes'
-KEY_KEY_SEP_CHAR = C_fc.KEY_KEY_SEP_CHAR
-KEY_VALUE_SEP_CHAR = C_fc.KEY_VALUE_SEP_CHAR
+KEY_KEY_SEP_CHAR = FCC_.KEY_KEY_SEP_CHAR
+KEY_VALUE_SEP_CHAR = FCC_.KEY_VALUE_SEP_CHAR
 
 DUMMY_TEXT = 'Dummy'
 
