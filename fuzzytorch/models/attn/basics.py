@@ -94,11 +94,11 @@ class SelfAttn(nn.Module):
 		pass
 
 	def register_src_mask(self, max_curve_length, device):
-		max_curve_length_changed = max_curve_length!=self.max_curve_length
+		max_curve_length_changed = not max_curve_length==self.max_curve_length
 		if max_curve_length_changed:
 			self.max_curve_length = max_curve_length
 			#self.register_buffer('src_mask', attn_utils.generate_square_subsequent_mask(self.max_curve_length).to(device))
-			self.src_mask = attn_utils.generate_square_subsequent_mask(self.max_curve_length).to(device)
+			self.src_mask = attn_utils.generate_square_subsequent_mask(self.max_curve_length).to(device) # slow to use .to() but it's not always
 			#print(self.src_mask.device)
 
 	def get_output_dims(self):
@@ -328,9 +328,9 @@ class TimeErrorSelfAttn(SelfAttn):
 		#print(error.shape, error)
 
 		if self.training:
-			min_error = torch.min(seq_utils.seq_min_pooling(error, onehot)).item()
+			min_error = torch.min(seq_utils.seq_min_pooling(error, onehot)).detach().item()
 			self.min_error = min_error if min_error<self.min_error else self.min_error
-			max_error = torch.max(seq_utils.seq_max_pooling(error, onehot)).item()
+			max_error = torch.max(seq_utils.seq_max_pooling(error, onehot)).detach().item()
 			self.max_error = max_error if max_error>self.max_error else self.max_error
 			pass
 		else:

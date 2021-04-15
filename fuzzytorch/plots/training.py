@@ -13,7 +13,6 @@ from flamingchoripan.cuteplots.utils import save_fig
 
 def plot_loss(train_handler,
 	sigma:float=4,
-
 	save_rootdir:str=None,
 	fig=None,
 	ax=None,
@@ -27,8 +26,8 @@ def plot_loss(train_handler,
 
 	fig, ax = plt.subplots(1,1, figsize=figsize, dpi=C_.PLOT_DPI) if fig is None else (fig, ax)
 	for lmonitor in train_handler.lmonitors:
-		loss = lmonitor.loss_df['__loss__']
-		sublosses_names = [c for c in lmonitor.loss_df.columns if c[:2]!='__']
+		loss = lmonitor.loss_df['_loss']
+		sublosses_names = [c for c in lmonitor.loss_df.columns if c[:1]!='_']
 		sublosses = lmonitor.loss_df[sublosses_names]
 		cmap = cc.get_default_cmap(len(sublosses_names)) if cmap is None else cmap
 		colors = cmap.colors

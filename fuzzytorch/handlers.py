@@ -148,9 +148,8 @@ class ModelTrainHandler(object):
 						#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
 						out_tdict_ = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs)
 						#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
-						out_tdict_ = TDictHolder(out_tdict_).to('cpu') # cpu to save gpu memory
+						out_tdict_ = TDictHolder(out_tdict_).to('cpu')
 						out_tdict.append(out_tdict_)
-
 					out_tdict = minibatch_dict_collate(out_tdict)
 
 					### save loss to history & bar text
@@ -216,7 +215,7 @@ class ModelTrainHandler(object):
 		can_be_in_loop = True
 		end_with_nan = False
 		for ke,epoch in enumerate(range(0, self.epochs_max+1)): # for epochs
-			training_kwargs.update({'__epoch__':epoch})
+			training_kwargs.update({'_epoch':epoch})
 			try:
 				if can_be_in_loop:
 					#with torch.autograd.detect_anomaly(): # really useful but slow af
@@ -225,20 +224,20 @@ class ModelTrainHandler(object):
 						train_loader.train() # dataset train mode!
 
 					for ki,in_tdict in enumerate(train_loader): # batches loop - k
-						backprop_text = f'id={self.id} - epoch={epoch:,}/{self.epochs_max:,}({ki:,}/{ks_epochs:,})'
+						backprop_text = f'id={self.id} - _epoch={epoch:,}/{self.epochs_max:,}({ki:,}/{ks_epochs:,})'
 						losses_text_list = []
 						for kt,lmonitor in enumerate(self.lmonitors): # along train lmonitors
 							lmonitor_cr = times.Cronometer()
 							#for lmonitor_aux in self.lmonitors: # freeze all other models except actual
 							#	lmonitor_aux.eval() # it's neccesary????
 							#lmonitor.train() # ensure train mode!
-							lmonitor.optimizer.zero_grad() # set gradient to 0
+							lmonitor.optimizer.none_grad() # none_grad zero_grad
 
 							#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
 							out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs) # Feed forward
 							#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
 							loss = lmonitor.loss(out_tdict, **training_kwargs)
-							loss.get_loss(numpy=False).backward() # gradient calculation
+							loss.get_loss(get_tensor=True).backward() # gradient calculation
 							lmonitor.optimizer.step() # step gradient
 
 							### save loss to history & bar text

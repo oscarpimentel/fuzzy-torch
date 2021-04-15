@@ -14,16 +14,18 @@ class MetricResult():
 		reduction_mode='mean',
 		):
 		assert len(batch_metric_.shape)==1
-		self.batch_metric_ = batch_metric_
+		self.batch_metric_ = batch_metric_.detach()
 		self.len_ = len(self.batch_metric_)
 		self.reduction_mode = reduction_mode
 		if self.reduction_mode=='mean':
 			self.batch_metric = self.batch_metric_.mean()[None]
 
 	def get_metric(self,
-		numpy=True,
+		get_tensor=False,
 		):
-		return self.batch_metric.item() if numpy else self.batch_metric
+		assert len(self.batch_metric.shape)==1
+		assert len(self.batch_metric)==1
+		return self.batch_metric.detach().item() if not get_tensor else self.batch_metric
 
 	def __len__(self):
 		return self.len_
@@ -48,7 +50,7 @@ class MetricResult():
 		return self
 
 	def get_info_df(self):
-		df = pd.DataFrame([self.get_metric()], columns=['__metric__'])
+		df = pd.DataFrame([self.get_metric()], columns=['_metric'])
 		return df
 
 ###################################################################################################################################################
@@ -78,7 +80,7 @@ class DummyAccuracy(FTMetric):
 		self.name = name
 
 	def __call__(self, tdict, **kwargs):
-		epoch = kwargs['__epoch__']
+		epoch = kwargs['_epoch']
 		y_target = tdict['target']['y']
 		y_pred = tdict['model']['y']
 
@@ -95,7 +97,7 @@ class Accuracy(FTMetric):
 		self.balanced = balanced
 
 	def __call__(self, tdict, **kwargs):
-		epoch = kwargs['__epoch__']
+		epoch = kwargs['_epoch']
 		y_target = tdict['target']['y']
 		y_pred = tdict['model']['y']
 		labels = y_pred.shape[-1]

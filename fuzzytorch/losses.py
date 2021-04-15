@@ -65,20 +65,23 @@ class LossResult():
 
 	def add_subloss(self, name, batch_subloss):
 		assert len(batch_subloss.shape)==1
-		self.batch_sublosses[name] = batch_subloss.mean()[None]
+		self.batch_sublosses[name] = batch_subloss.detach().mean()[None]
 
 	def get_loss(self,
-		numpy=True,
+		get_tensor=False,
 		):
-		numpy_loss = self.batch_loss.item()
-		if np.any(np.isnan(numpy_loss)) or np.any(numpy_loss==np.infty) or np.any(numpy_loss==-np.infty):
+		assert len(self.batch_loss.shape)==1
+		assert len(self.batch_loss)==1
+		if torch.any(torch.isnan(self.batch_loss)) or torch.any(~torch.isfinite(self.batch_loss)):
 			raise ex.NanLossError()
-		return numpy_loss if numpy else self.batch_loss
+		return self.batch_loss.detach().item() if not get_tensor else self.batch_loss
 
 	def get_subloss(self, name,
-		numpy=True,
+		get_tensor=False,
 		):
-		return self.batch_sublosses[name].item() if numpy else self.batch_sublosses[name]
+		assert len(self.batch_sublosses[name].shape)==1
+		assert len(self.batch_sublosses[name])==1
+		return self.batch_sublosses[name].detach().item() if not get_tensor else self.batch_sublosses[name]
 
 	def get_sublosses_names(self):
 		return list(self.batch_sublosses.keys())
@@ -118,7 +121,7 @@ class LossResult():
 	def get_info_df(self):
 		sublosses_names = self.get_sublosses_names()
 		values = [len(self), self.get_loss()]+[self.get_subloss(name) for name in sublosses_names]
-		df = pd.DataFrame([values], columns=['__len__', '__loss__']+sublosses_names)
+		df = pd.DataFrame([values], columns=['_len', '_loss']+sublosses_names)
 		return df
 
 ###################################################################################################################################################
@@ -139,7 +142,7 @@ class XEntropy(FTLoss):
 		self.target_is_onehot = target_is_onehot
 
 	def __call__(self, tdict, **kwargs):
-		epoch = kwargs['__epoch__']
+		epoch = kwargs['_epoch']
 		y_pred = tdict['model']['y']
 		y_target = tdict['target']['y']
 		

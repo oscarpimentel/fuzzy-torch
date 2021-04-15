@@ -4,6 +4,7 @@ from . import C_
 
 import torch.nn as nn
 import pandas as pd
+import torch
 
 ###################################################################################################################################################
 
@@ -12,7 +13,7 @@ class LossOptimizer:
 		opt_kwargs:dict={},
 		decay_epochs_delta:int=1,
 		decay_kwargs:dict={},
-		clip_grad:float=None,
+		clip_grad:float=1.,
 		model_get_parameters_f=None,
 		):
 		self.to_optimize_model = to_optimize_model
@@ -46,6 +47,9 @@ class LossOptimizer:
 
 	def zero_grad(self):
 		self.optimizer.zero_grad()
+
+	def none_grad(self):
+		self.optimizer.zero_grad(set_to_none=True)
 
 	def apply_clip_grad(self):
 		if not self.clip_grad is None:

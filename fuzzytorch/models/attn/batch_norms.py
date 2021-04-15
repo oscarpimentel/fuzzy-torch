@@ -32,7 +32,7 @@ def lengths_to_mask(lengths, max_len=None, dtype=None):
 	:returns: N*max_len dimensional tensor. If max_len==None, max_len=max(lengtsh)
 	"""
 	assert len(lengths.shape) == 1, 'Length shape should be 1 dimensional.'
-	max_len = max_len or lengths.max().item()
+	max_len = max_len or lengths.max().detach().item()
 	mask = torch.arange(
 		max_len,
 		device=lengths.device,

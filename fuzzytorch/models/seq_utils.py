@@ -102,7 +102,7 @@ def get_seq_onehot_mask(seqlengths, max_seqlength,
 	assert seqlengths.dtype==torch.long
 
 	batch_size = len(seqlengths)
-	mask = torch.arange(max_seqlength).expand(batch_size, max_seqlength).to(seqlengths.device if device is None else device)
+	mask = torch.arange(max_seqlength, device=seqlengths.device if device is None else device).expand(batch_size, max_seqlength)
 	mask = (mask < seqlengths[...,None])
 	return mask.bool() # (b,t)
 
