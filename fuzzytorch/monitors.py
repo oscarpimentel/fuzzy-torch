@@ -11,7 +11,7 @@ from . import optimizers as ft_optimizers
 from . import exceptions as ex
 import flamingchoripan.files as files
 from flamingchoripan.counters import Counter
-from flamingchoripan.datascience.statistics import XError
+from flamingchoripan.datascience.xerror import XError
 import pandas as pd
 
 ###################################################################################################################################################

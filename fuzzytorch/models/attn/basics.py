@@ -328,9 +328,9 @@ class TimeErrorSelfAttn(SelfAttn):
 		#print(error.shape, error)
 
 		if self.training:
-			min_error = torch.min(seq_utils.seq_min_pooling(error, onehot)).detach().item()
+			min_error = torch.min(seq_utils.seq_min_pooling(error.detach(), onehot.detach())).item()
 			self.min_error = min_error if min_error<self.min_error else self.min_error
-			max_error = torch.max(seq_utils.seq_max_pooling(error, onehot)).detach().item()
+			max_error = torch.max(seq_utils.seq_max_pooling(error.detach(), onehot).detach()).detach().item()
 			self.max_error = max_error if max_error>self.max_error else self.max_error
 			pass
 		else:
