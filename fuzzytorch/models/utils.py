@@ -16,16 +16,3 @@ def count_memory_mb(module,
 	assert 0, 'not implemented'
 	assert bits*count_parameters(module)
 
-###################################################################################################################################################
-
-class TinyModels(nn.Module):
-	'''
-	Class used mostly for decorators
-	'''
-	def _silence(fun):
-		def new_forward(self, *args, **kwargs):
-			with HiddenPrints():
-				ret = fun(self, *args, **kwargs) # speacially useful for self.forward
-			return ret
-		return new_forward
-

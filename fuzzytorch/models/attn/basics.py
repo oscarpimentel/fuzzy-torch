@@ -322,6 +322,7 @@ class TimeErrorSelfAttn(SelfAttn):
 
 	def forward(self, x, onehot, error,
 		**kwargs):
+		'''
 		#print(self.src_mask.shape, self.src_mask)
 		assert torch.all(error>=0)
 		error = error[...,None]
@@ -345,20 +346,21 @@ class TimeErrorSelfAttn(SelfAttn):
 		#pos_error_a = torch.clamp(self.error_a, C_.EPS, None)
 		error_b = self.error_b
 		#error_mask = 2*(error_mask-self.min_error)/(self.max_error-self.min_error)-1 # norm [-1,1]
-		
-		mul_attn_mask = None # dummy
+		extra_info = {
+			#'min_error':self.min_error,
+			#'max_error':self.max_error,
+			#'pos_error_a':pos_error_a,
+			#'error_b':error_b,
+		}
+		'''
+
+		mul_attn_mask = None # dummy hehe
 		#mul_attn_mask = 1-torch.sigmoid(pos_error_a[None,:,None,None]*error_mask+self.error_b[None,:,None,None])
 		#mul_attn_mask = 1-torch.sigmoid(pos_error_a[None,:,None,None]*error_mask)
 		#mul_attn_mask = 1-torch.sigmoid(error_mask)
 
 		x, scores = super().forward(x, onehot, mul_attn_mask=mul_attn_mask, **kwargs)
-		extra_info = {
-			'min_error':self.min_error,
-			'max_error':self.max_error,
-			'pos_error_a':pos_error_a,
-			'error_b':error_b,
-		}
-		return x, scores, extra_info
+		return x, scores
 
 class MLTimeErrorSelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, te_features, max_te_period,
@@ -402,9 +404,7 @@ class MLTimeErrorSelfAttn(nn.Module):
 			activations[-1] = self.last_activation
 
 		### MODULES
-		self.te_mod = TemporalEncoding(self.te_features, self.max_te_period)
-		print('te_mod:',self.te_mod)
-
+		self.te_mods = nn.ModuleList()
 		self.self_attns = nn.ModuleList()
 		self.te_films = nn.ModuleList()
 		for k in range(len(self.embd_dims_list)-1):
@@ -428,6 +428,10 @@ class MLTimeErrorSelfAttn(nn.Module):
 			film = FILM(self.te_features, input_dims_, **film_kwargs)
 			self.te_films += [film]
 
+			te_mod = TemporalEncoding(self.te_features, self.max_te_period)
+			print('te_mod:',te_mod)
+			self.te_mods += [te_mod]
+
 		self.reset()
 
 	def reset(self):
@@ -447,6 +451,12 @@ class MLTimeErrorSelfAttn(nn.Module):
 		txt = f'MLTimeErrorSelfAttn(\n{resume})({len(self):,}[p])'
 		return txt
 
+	def get_info(self):
+		d = {
+			'te_mod':[te_mod.get_info() for te_mod in self.te_mods],
+			}
+		return d
+
 	def forward(self, x, onehot, time, error, **kwargs):
 		'''
 		Parameters
@@ -458,7 +468,7 @@ class MLTimeErrorSelfAttn(nn.Module):
 		Return
 		----------
 		x: (b,t,out): output tensor.
-		layer_scores: (b,layers,h,t,qt)
+		scores: (b,layers,h,t,qt)
 		'''
 		assert onehot.dtype==torch.bool
 		assert len(onehot.shape)==2
@@ -466,14 +476,11 @@ class MLTimeErrorSelfAttn(nn.Module):
 		assert len(x.shape)==3
 		assert len(time.shape)==2
 
-		te = self.te_mod(time)
-		layers_scores = []
-		extra_infos = []
-		for k,(te_film,self_attn) in enumerate(zip(self.te_films, self.self_attns)):
+		scores = []
+		for k,(te_film,self_attn,te_mod) in enumerate(zip(self.te_films, self.self_attns, self.te_mods)):
+			te = te_mod(time)
 			x = te_film(x, te)
-			x, layer_scores, extra_info = self_attn(x, onehot, error, **kwargs)
-			layers_scores += [layer_scores[:,None,...]]
-			extra_infos += [extra_info]
+			x, _scores = self_attn(x, onehot, error, **kwargs)
+			scores += [_scores]
 
-		layers_scores = torch.cat(layers_scores, dim=1)
-		return x, layers_scores, extra_infos
+		return x, scores
