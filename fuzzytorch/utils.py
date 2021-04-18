@@ -10,7 +10,7 @@ from torch.utils.data._utils.collate import default_collate
 
 def tensor_to_numpy(x):
 	return x.cpu().detach().numpy()
-	
+
 ###################################################################################################################################################
 
 def iter_paths(d):
@@ -32,7 +32,7 @@ def tdict_to_device(d, device):
 	if isinstance(d, dict):
 		return {k:tdict_to_device(d[k], device) for k in d.keys()}
 	elif isinstance(d, torch.Tensor):
-		return d.to(device)
+		return d if d.device==device else d.to(device)
 	else:
 		raise Exception(f'not supported {type(d)}')
 
