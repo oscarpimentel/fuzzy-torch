@@ -31,7 +31,9 @@ def softclamp_elu(x, a, b):
 def softclamp(x, a, b):
 	return softclamp_lrelu(x, a, b)
 
-def _te(te_ws, te_phases, te_scales, ntime):
+def _te(te_ws, te_phases, te_scales, ntime,
+	first_is_linear=False,
+	):
 	'''
 	te_ws (f)
 	te_phases (f)
@@ -44,14 +46,15 @@ def _te(te_ws, te_phases, te_scales, ntime):
 	_te_phases = te_phases[None,None,:] # (f) > (1,1,f)
 	_te_scales = te_scales[None,None,:] # (f) > (1,1,f)
 	_ntime = ntime[...,None] # (b,t) > (b,t,1)
-	if True:
-		encoding2 = _te_scales*torch.sin(_te_ws*_ntime+_te_phases) # (b,t,f)
-	else:
+	if first_is_linear:
 		encoding1 = _te_scales[...,0][...,None]*(_te_ws[...,0][...,None]*_ntime+_te_phases[...,0][...,None]) # (b,t,f)
 		encoding2 = _te_scales[...,1:]*torch.sin(_te_ws[...,1:]*_ntime+_te_phases[...,1:]) # (b,t,f)
 		#print(encoding1.shape, encoding2.shape)
 		encoding = torch.cat([encoding1, encoding2], axis=-1)
-	#print(te_ws.dtype, te_phases.dtype, te_scales.dtype, ntime.dtype)
+	else:
+		encoding = _te_scales*torch.sin(_te_ws*_ntime+_te_phases) # (b,t,f)
+	#print(encoding.shape)
+	#te_ws.dtype, te_phases.dtype, te_scales.dtype, ntime.dtype)
 	return encoding
 
 def _te_old(te_ws, te_phases, te_scales, ntime):
