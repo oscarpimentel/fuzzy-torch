@@ -44,7 +44,13 @@ def _te(te_ws, te_phases, te_scales, ntime):
 	_te_phases = te_phases[None,None,:] # (f) > (1,1,f)
 	_te_scales = te_scales[None,None,:] # (f) > (1,1,f)
 	_ntime = ntime[...,None] # (b,t) > (b,t,1)
-	encoding = _te_scales*torch.sin(_te_ws*_ntime+_te_phases) # (b,t,f)
+	if True:
+		encoding2 = _te_scales*torch.sin(_te_ws*_ntime+_te_phases) # (b,t,f)
+	else:
+		encoding1 = _te_scales[...,0][...,None]*(_te_ws[...,0][...,None]*_ntime+_te_phases[...,0][...,None]) # (b,t,f)
+		encoding2 = _te_scales[...,1:]*torch.sin(_te_ws[...,1:]*_ntime+_te_phases[...,1:]) # (b,t,f)
+		#print(encoding1.shape, encoding2.shape)
+		encoding = torch.cat([encoding1, encoding2], axis=-1)
 	#print(te_ws.dtype, te_phases.dtype, te_scales.dtype, ntime.dtype)
 	return encoding
 
@@ -163,8 +169,8 @@ class TemporalEncoding(nn.Module):
 		self.max_w = np.max(ws)
 		self.initial_ws = torch.as_tensor(ws)
 		self.te_ws = torch.nn.Parameter(self.initial_ws.clone(), requires_grad=True) # True False
-		self.te_phases = torch.nn.Parameter(torch.zeros((len(self.te_ws))), requires_grad=True) # True False
-		self.te_scales = torch.nn.Parameter(torch.zeros((len(self.te_ws))), requires_grad=False) # True False*
+		self.te_phases = torch.nn.Parameter(torch.zeros((self.get_output_dims())), requires_grad=True) # True False
+		self.te_scales = torch.nn.Parameter(torch.zeros((self.get_output_dims())), requires_grad=False) # True False*
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
 
 	def generate_initial_periods(self):
@@ -172,7 +178,7 @@ class TemporalEncoding(nn.Module):
 			#periods = np.array([self.max_te_period]*len_periods/2**np.arange(len_periods)) # fixme!!
 		#	assert 0
 
-		periods = np.linspace(self.max_te_period, self.min_te_period, self.te_features).astype(np.float32)
+		periods = np.linspace(self.max_te_period, self.min_te_period, self.get_output_dims()).astype(np.float32)
 		if self.ktime is None:
 			self.ktime = 1/(np.max(periods)-np.min(periods))
 		return periods
@@ -218,7 +224,7 @@ class TemporalEncoding(nn.Module):
 		return txt
 
 	def get_output_dims(self):
-		return len(self.te_ws)
+		return self.te_features+1
 
 	def get_te_ws(self):
 		te_ws = softclamp(self.te_ws, self.min_w, self.max_w)

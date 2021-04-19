@@ -425,12 +425,12 @@ class MLTimeErrorSelfAttn(nn.Module):
 			film_kwargs = {
 				#'in_dropout':self.dropout,
 			}
-			film = FILM(self.te_features, input_dims_, **film_kwargs)
-			self.te_films += [film]
-
 			te_mod = TemporalEncoding(self.te_features, self.max_te_period)
 			print('te_mod:',te_mod)
 			self.te_mods += [te_mod]
+
+			film = FILM(te_mod.get_output_dims(), input_dims_, **film_kwargs)
+			self.te_films += [film]
 
 		self.reset()
 
