@@ -129,7 +129,6 @@ class SelfAttn(nn.Module):
 
 	def forward(self, x, onehot,
 		mul_attn_mask=None,
-		return_only_actual_scores=False,
 		**kwargs):
 		'''
 		Parameters
@@ -158,7 +157,6 @@ class SelfAttn(nn.Module):
 		keys = x.permute(1,0,2)
 		values = x.permute(1,0,2)
 		contexts, scores = self.mh_attn(queries, keys, values, **attn_kwargs)
-		scores = scores.detach()
 		#assert 0
 		
 		#scores = scores.cpu()
@@ -173,14 +171,6 @@ class SelfAttn(nn.Module):
 		x = self.activation_f(x, dim=-1)
 		x = self.out_dropout_f(x)
 		#print(scores.shape)
-		
-		if return_only_actual_scores:
-			b,h,t,qt = scores.size()
-			scores = scores.permute(0,2,1,3) # (b,h,t,qt) > (b,t,h,qt)
-			scores = scores.reshape(b,t,h*qt)
-			scores = seq_utils.seq_last_element(scores, onehot) # last element
-			scores = scores.reshape(b,h,qt)
-
 		return x, scores
 
 class MLSelfAttn(nn.Module):
@@ -259,10 +249,7 @@ class MLSelfAttn(nn.Module):
 		txt = f'MLSelfAttn(\n{resume})({len(self):,}[p])'
 		return txt
 
-	def forward(self, x, onehot,
-		mul_attn_mask=None,
-		return_only_actual_scores=False,
-		**kwargs):
+	def forward(self, x, onehot, **kwargs):
 		'''
 		Parameters
 		----------
@@ -272,23 +259,20 @@ class MLSelfAttn(nn.Module):
 		Return
 		----------
 		x: (b,t,out): output tensor.
-		layers_scores: (b,h,t,qt)
+		layers_scores: (b,layers,h,t,qt)
 		'''
 		assert onehot.dtype==torch.bool
 		assert len(onehot.shape)==2
 		assert x.shape[:-1]==onehot.shape
 		assert len(x.shape)==3
 
-		outs = []
-		scores = []
+		layers_scores = []
 		for k,self_attn in enumerate(self.self_attns):
-			x, _scores = self_attn(x, onehot,
-				mul_attn_mask,
-				return_only_actual_scores,
-				**kwargs)
-			outs += [x]
-			scores += [_scores]
-		return x, scores
+			x, layer_scores = self_attn(x, onehot, **kwargs)
+			layers_scores += [layer_scores[:,None,...]]
+
+		layers_scores = torch.cat(layers_scores, dim=1)
+		return x, layers_scores
 
 	def __len__(self):
 		return utils.count_parameters(self)
@@ -302,7 +286,7 @@ class MLSelfAttn(nn.Module):
 
 ###################################################################################################################################################
 
-class TimeSelfAttn(SelfAttn):
+class TimeErrorSelfAttn(SelfAttn):
 	def __init__(self, input_dims:int, output_dims:int,
 		max_curve_length=None,
 		num_heads=2,
@@ -336,18 +320,49 @@ class TimeSelfAttn(SelfAttn):
 		#self.min_error = 0
 		#self.max_error = 0.05
 
-	def forward(self, x, onehot,
-		mul_attn_mask=None,
-		return_only_actual_scores=False,
+	def forward(self, x, onehot, error,
 		**kwargs):
-		#mul_attn_mask = None # dummy hehe
-		x, scores = super().forward(x, onehot,
-			mul_attn_mask,
-			return_only_actual_scores,
-			**kwargs)
+		'''
+		#print(self.src_mask.shape, self.src_mask)
+		assert torch.all(error>=0)
+		error = error[...,None]
+		#print(error.shape, error)
+
+		if self.training:
+			min_error = torch.min(seq_utils.seq_min_pooling(error.detach(), onehot.detach())).item()
+			self.min_error = min_error if min_error<self.min_error else self.min_error
+			max_error = torch.max(seq_utils.seq_max_pooling(error.detach(), onehot).detach()).detach().item()
+			self.max_error = max_error if max_error>self.max_error else self.max_error
+			pass
+		else:
+			#print(self.error_a, self.error_b)
+			pass
+
+		error = error.permute(0,2,1)[:,None,...] # (b,t,1) > (b,1,1,t)
+		error_mask = error.repeat(1, self.num_heads, x.shape[1], 1) # (b,h,t,t)
+		#print(error_mask.shape, error_mask)
+		#pos_error_a = torch.log(torch.exp(self.error_a)+C_.EPS)
+		pos_error_a = torch.sqrt(self.error_a**2+C_.EPS)
+		#pos_error_a = torch.clamp(self.error_a, C_.EPS, None)
+		error_b = self.error_b
+		#error_mask = 2*(error_mask-self.min_error)/(self.max_error-self.min_error)-1 # norm [-1,1]
+		extra_info = {
+			#'min_error':self.min_error,
+			#'max_error':self.max_error,
+			#'pos_error_a':pos_error_a,
+			#'error_b':error_b,
+		}
+		'''
+
+		mul_attn_mask = None # dummy hehe
+		#mul_attn_mask = 1-torch.sigmoid(pos_error_a[None,:,None,None]*error_mask+self.error_b[None,:,None,None])
+		#mul_attn_mask = 1-torch.sigmoid(pos_error_a[None,:,None,None]*error_mask)
+		#mul_attn_mask = 1-torch.sigmoid(error_mask)
+
+		x, scores = super().forward(x, onehot, mul_attn_mask=mul_attn_mask, **kwargs)
 		return x, scores
 
-class MLTimeSelfAttn(nn.Module):
+class MLTimeErrorSelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, te_features, max_te_period,
 		max_curve_length=None,
 		num_heads=2,
@@ -405,7 +420,7 @@ class MLTimeSelfAttn(nn.Module):
 				'bias':self.bias,
 				'uses_length_wise_batchnorm':self.uses_length_wise_batchnorm,
 			}
-			self_attn = TimeSelfAttn(input_dims_, output_dims_, **attn_kwargs)
+			self_attn = TimeErrorSelfAttn(input_dims_, output_dims_, **attn_kwargs)
 			self.self_attns += [self_attn]
 			te_mod = TemporalEncoding(self.te_features, self.max_te_period)
 			print('te_mod:',te_mod)
@@ -433,7 +448,7 @@ class MLTimeSelfAttn(nn.Module):
 		resume = ''
 		for k,self_attn in enumerate(self.self_attns):
 			resume += f'  ({k}) - {str(self_attn)}\n'
-		txt = f'MLTimeSelfAttn(\n{resume})({len(self):,}[p])'
+		txt = f'MLTimeErrorSelfAttn(\n{resume})({len(self):,}[p])'
 		return txt
 
 	def get_info(self):
@@ -442,10 +457,7 @@ class MLTimeSelfAttn(nn.Module):
 			}
 		return d
 
-	def forward(self, x, onehot, time,
-		mul_attn_mask=None,
-		return_only_actual_scores=False,
-		**kwargs):
+	def forward(self, x, onehot, time, error, **kwargs):
 		'''
 		Parameters
 		----------
@@ -456,7 +468,7 @@ class MLTimeSelfAttn(nn.Module):
 		Return
 		----------
 		x: (b,t,out): output tensor.
-		scores: (b,h,t,qt)
+		scores: (b,layers,h,t,qt)
 		'''
 		assert onehot.dtype==torch.bool
 		assert len(onehot.shape)==2
@@ -466,13 +478,12 @@ class MLTimeSelfAttn(nn.Module):
 
 		outs = []
 		scores = []
+
 		for k,(te_film,self_attn,te_mod) in enumerate(zip(self.te_films, self.self_attns, self.te_mods)):
 			te = te_mod(time)
 			x = te_film(x, te)
-			x, _scores = self_attn(x, onehot,
-				mul_attn_mask,
-				return_only_actual_scores,
-				**kwargs)
+			x, _scores = self_attn(x, onehot, error, **kwargs)
 			outs += [x]
 			scores += [_scores]
+
 		return outs, scores

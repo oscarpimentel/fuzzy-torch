@@ -14,14 +14,18 @@ import math
 
 ###################################################################################################################################################
 
-def softclamp_lrelu(x, a, b):
+def softclamp_lrelu(x, a, b,
+	negative_slope=0.01,
+	):
 	assert a<b
 	#z = torch.clamp(x, a, s)
-	z = F.leaky_relu(x-a)+a
-	z = -(F.leaky_relu(-z+b)-b)
+	z = F.leaky_relu(x-a, negative_slope=negative_slope)+a
+	z = -(F.leaky_relu(-z+b, negative_slope=negative_slope)-b)
 	return z
 
-def softclamp_elu(x, a, b):
+def softclamp_elu(x, a, b,
+	alpha=0.1,
+	):
 	assert a<b
 	#z = torch.clamp(x, a, s)
 	z = F.elu(x-a)+a
@@ -31,51 +35,47 @@ def softclamp_elu(x, a, b):
 def softclamp(x, a, b):
 	return softclamp_lrelu(x, a, b)
 
-def _te(te_ws, te_phases, te_scales, ntime,
-	first_is_linear=False,
+def cyclic_mod(x, a, b):
+	assert b>a
+	return (x-a)%(b-a)+a
+	
+def _te1111(te_ws, te_phases, ntime,
+	uses_linear_term=False, # False* True # using this yields to bad performance for some reason, maybe it's explodes?
 	):
 	'''
 	te_ws (f)
 	te_phases (f)
-	te_scales (f)
 	ntime (b,t)
 	'''
+	#print(te_ws.shape, te_phases.shape, ntime.shape)
 	b,t = ntime.size()
 	f = len(te_ws)
 	_te_ws = te_ws[None,None,:] # (f) > (1,1,f)
 	_te_phases = te_phases[None,None,:] # (f) > (1,1,f)
-	_te_scales = te_scales[None,None,:] # (f) > (1,1,f)
 	_ntime = ntime[...,None] # (b,t) > (b,t,1)
-	if first_is_linear:
-		encoding1 = _te_scales[...,0][...,None]*(_te_ws[...,0][...,None]*_ntime+_te_phases[...,0][...,None]) # (b,t,f)
-		encoding2 = _te_scales[...,1:]*torch.sin(_te_ws[...,1:]*_ntime+_te_phases[...,1:]) # (b,t,f)
+	if uses_linear_term:
+		encoding1 = _te_ws[...,0][...,None]*_ntime+_te_phases[...,0][...,None] # (b,t,f)
+		encoding2 = torch.sin(_te_ws[...,1:]*_ntime+_te_phases[...,1:]) # (b,t,f)
 		#print(encoding1.shape, encoding2.shape)
 		encoding = torch.cat([encoding1, encoding2], axis=-1)
 	else:
-		encoding = _te_scales*torch.sin(_te_ws*_ntime+_te_phases) # (b,t,f)
+		encoding = torch.sin(_te_ws*_ntime+_te_phases) # (b,t,f)
 	#print(encoding.shape)
-	#te_ws.dtype, te_phases.dtype, te_scales.dtype, ntime.dtype)
+	#te_ws.dtype, te_phases.dtype, ntime.dtype)
 	return encoding
 
-def _te_old(te_ws, te_phases, te_scales, ntime):
+def _te(te_ws, te_phases, ntime):
 	'''
 	te_ws (f)
 	te_phases (f)
-	te_scales (f)
 	ntime (b,t)
 	'''
-	#print(self.max_te_period, self.get_te_periods(), te_phases, te_scales)
-	b,t = time.size()
-	encoding = torch.zeros((b, t, self.get_output_dims()), device=time.device) # (b,t,f)
+	b,t = ntime.size()
+	encoding = torch.zeros((b, t, len(te_phases)), device=ntime.device) # (b,t,f)
 	for i in range(0, len(te_ws)):
 		w = te_ws[i]
 		phi = te_phases[i]
-		scale = te_scales[i]
-
-		encoding[...,i] = scale*torch.sin(w*ntime+phi)
-		#encoding[...,2*i] = scale*(w*ntime+phi)
-		#encoding[...,2*i] = scale*torch.sin(w*ntime+phi)
-		#encoding[...,2*i+1] = scale*torch.cos(w*ntime+phi)
+		encoding[...,i] = torch.sin(w*ntime+phi)
 	return encoding
 
 ###################################################################################################################################################
@@ -99,16 +99,17 @@ class FILM(nn.Module):
 		self.out_dropout = out_dropout
 		self.mod_dropout = mod_dropout
 		self.bias = bias
+		self.reset()
 
-		### MODULES
+	def reset(self):
 		linear_kwargs = {
 			'activation':'linear',
-			'split_out':2,
 			'bias':self.bias,
 		}
 		self.is_dummy = self.mod_input_dims==0
 		if not self.is_dummy:
-			self.mod_f = Linear(self.mod_input_dims, self.mod_output_dims, **linear_kwargs)
+			self.gamma_f = Linear(self.mod_input_dims, self.mod_output_dims, bias_value=1., **linear_kwargs)
+			self.beta_f = Linear(self.mod_input_dims, self.mod_output_dims, **linear_kwargs)
 			self.in_dropout_f = nn.Dropout(self.in_dropout)
 			self.out_dropout_f = nn.Dropout(self.out_dropout)
 			self.mod_dropout_f = nn.Dropout(self.mod_dropout)
@@ -120,7 +121,9 @@ class FILM(nn.Module):
 
 		if not self.is_dummy:
 			x = self.in_dropout_f(x)
-			gamma, beta = self.mod_f(self.mod_dropout_f(mod))
+			mod = self.mod_dropout_f(mod)
+			gamma = self.gamma_f(mod)
+			beta = self.beta_f(mod)
 			x = x*gamma+beta
 			x = self.out_dropout_f(x)
 		return x
@@ -148,7 +151,7 @@ class FILM(nn.Module):
 
 class TemporalEncoding(nn.Module):
 	def __init__(self, te_features, max_te_period,
-		min_te_period=2,
+		min_te_period=None,
 		out_dropout=0.0,
 		ktime=1,
 		**kwargs):
@@ -163,28 +166,43 @@ class TemporalEncoding(nn.Module):
 		self.min_te_period = min_te_period
 		self.out_dropout = out_dropout
 		self.ktime = ktime
+		self.random_init = False # True False
 		self.reset()
 
 	def reset(self):
-		periods = self.generate_initial_periods()
-		ws = self.period2w(self.time2ntime(periods))
-		self.min_w = np.min(ws)
-		self.max_w = np.max(ws)
-		self.initial_ws = torch.as_tensor(ws)
-		self.te_ws = torch.nn.Parameter(self.initial_ws.clone(), requires_grad=True) # True False
-		self.te_phases = torch.nn.Parameter(torch.zeros((self.get_output_dims())), requires_grad=True) # True False
-		self.te_scales = torch.nn.Parameter(torch.zeros((self.get_output_dims())), requires_grad=False) # True False*
+		periods, phases = self.generate_initial_tensors()
+		self.initial_ws = self.period2w(self.time2ntime(periods))
+		self.initial_phases = phases
+
+		self.min_w = np.min(self.initial_ws)
+		self.max_w = np.max(self.initial_ws)
+
+		if self.random_init:
+			#self.te_ws = torch.nn.Parameter(torch.normal(0., 0.1, size=[self.get_output_dims()]), requires_grad=True) # True False
+			#self.te_phases = torch.nn.Parameter(torch.normal(0., 0.1, size=[self.get_output_dims()]), requires_grad=True) # True False
+			pass
+		else:
+			requires_grad = False
+			self.te_ws = torch.nn.Parameter(torch.as_tensor(self.initial_ws), requires_grad=requires_grad) # True False
+			self.te_phases = torch.nn.Parameter(torch.as_tensor(self.initial_phases), requires_grad=requires_grad) # True False
+
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
 
-	def generate_initial_periods(self):
-		#if self.min_te_period is None:
-			#periods = np.array([self.max_te_period]*len_periods/2**np.arange(len_periods)) # fixme!!
-		#	assert 0
+	def generate_initial_tensors(self):
+		if self.min_te_period is None:
+			l = self.get_output_dims()//2
+			periods = np.repeat(np.array([self.max_te_period]*l/2**np.arange(l)), 2, axis=0)
+			phases = np.array([math.pi/2 if i%2==0 else 0 for i in range(0, 2*l)])
+		else:
+			periods = np.linspace(self.max_te_period, self.min_te_period, self.get_output_dims()).astype(np.float32)
+		
+		#print(periods, phases)
+		#assert 0
+		return periods, phases
 
-		periods = np.linspace(self.max_te_period, self.min_te_period, self.get_output_dims()).astype(np.float32)
+	def xafasf(self):
 		if self.ktime is None:
 			self.ktime = 1/(np.max(periods)-np.min(periods))
-		return periods
 
 	def time2ntime(self, t):
 		return t*self.ktime
@@ -204,7 +222,7 @@ class TemporalEncoding(nn.Module):
 			'min_te_period':self.min_te_period,
 			'max_te_period':self.max_te_period,
 			'out_dropout':self.out_dropout,
-			#'te_periods':self.te_periods,
+			'te_periods':[p for p in tensor_to_numpy(self.get_te_periods())],
 			}, ', ', '=')
 		return txt
 
@@ -212,11 +230,11 @@ class TemporalEncoding(nn.Module):
 		assert not self.training, 'you can not access this method in trining mode'
 		d = {
 			'te_features':self.te_features,
-			'initial_ws':tensor_to_numpy(self.initial_ws),
+			'initial_ws':self.initial_ws,
+			'initial_phases':self.initial_phases,
 			'te_ws':tensor_to_numpy(self.get_te_ws()),
 			'te_periods':tensor_to_numpy(self.get_te_periods()),
 			'te_phases':tensor_to_numpy(self.get_te_phases()),
-			'te_scales':tensor_to_numpy(self.get_te_scales()),
 			'ktime':self.ktime,
 			}
 		return d
@@ -227,10 +245,13 @@ class TemporalEncoding(nn.Module):
 		return txt
 
 	def get_output_dims(self):
-		return self.te_features+1
+		#return self.te_features+1
+		return self.te_features
 
 	def get_te_ws(self):
-		te_ws = softclamp(self.te_ws, self.min_w, self.max_w)
+		te_ws = self.te_ws
+		#te_ws = cyclic_mod(self.te_ws, self.min_w, self.max_w) # horrible
+		#te_ws = softclamp(self.te_ws, self.min_w, self.max_w)
 		return te_ws
 
 	def get_te_periods(self):
@@ -243,23 +264,15 @@ class TemporalEncoding(nn.Module):
 		#te_phases = torch.tanh(self.te_phases)*te_periods
 		return self.te_phases
 
-	def get_te_scales(self):
-		k = 1
-		te_scales = torch.sigmoid(k*self.te_scales)
-		#te_scales = (torch.tanh(k*self.te_scales)+1.)/2.
-		return te_scales
-
 	def forward(self, time, **kwargs):
 		# time (b,t)
 		assert len(time.shape)==2
 
-		#te_ws = torch.sqrt(self.te_ws**2+C_.EPS) # positive operation
 		ntime = self.time2ntime(time)
 		te_ws = self.get_te_ws()
 		te_phases = self.get_te_phases()
-		te_scales = self.get_te_scales()
 
-		encoding = _te(te_ws, te_phases, te_scales, ntime)
+		encoding = _te(te_ws, te_phases, ntime)
 		encoding = self.out_dropout_f(encoding)
 		#print(encoding.shape, encoding.device)
 		return encoding

@@ -20,6 +20,7 @@ class Linear(nn.Module):
 		bias=True,
 		uses_custom_non_linear_init=False,
 		split_out=1,
+		bias_value=0.,
 		**kwargs):
 		super().__init__()
 		### CHECKS
@@ -35,18 +36,21 @@ class Linear(nn.Module):
 		self.bias = bias
 		self.uses_custom_non_linear_init = uses_custom_non_linear_init
 		self.split_out = split_out
+		self.bias_value = bias_value
+		self.reset()
 
+	def reset(self):
 		self.in_dropout_f = nn.Dropout(self.in_dropout)
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
 		self.linear = nn.Linear(self.input_dims, self.output_dims*self.split_out, bias=self.bias)
 		self.activation_f = non_linear.get_activation(self.activation)
-		self.reset()
+		self.init_parameters()
 
-	def reset(self):
+	def init_parameters(self):
 		if self.uses_custom_non_linear_init:
 			xavier_uniform_(self.linear.weight, gain=non_linear.get_xavier_gain(self.activation))
-			if self.bias is not None:
-				constant_(self.linear.bias, 0.0)
+		if not self.bias is not None:
+			constant_(self.linear.bias, self.bias_value)
 
 	def get_output_dims(self):
 		return self.output_dims
@@ -76,7 +80,8 @@ class Linear(nn.Module):
 		'in_dropout':self.in_dropout,
 		'out_dropout':self.out_dropout,
 		'bias':self.bias,
-		'split_out':self.split_out
+		'split_out':self.split_out,
+		'bias_value':self.bias_value,
 		}, ', ', '=')
 		return txt
 

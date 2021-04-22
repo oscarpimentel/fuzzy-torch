@@ -7,7 +7,7 @@ import numpy as np
 
 ###################################################################################################################################################
 
-def check_(x, onehot):
+def _check(x, onehot):
 	assert onehot.dtype==torch.bool
 	assert len(onehot.shape)==2
 	assert x.shape[:-1]==onehot.shape
@@ -20,7 +20,7 @@ def seq_clean(x, onehot):
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	check_(x, onehot)
+	_check(x, onehot)
 
 	x = x.masked_fill(~onehot[...,None], 0) # clean using onehot
 	return x
@@ -30,7 +30,7 @@ def seq_avg_pooling(x, onehot):
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	check_(x, onehot)
+	_check(x, onehot)
 
 	x = seq_clean(x, onehot) # important
 	new_onehot = onehot.clone()
@@ -43,7 +43,7 @@ def seq_sum_pooling(x, onehot):
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	check_(x, onehot)
+	_check(x, onehot)
 
 	x = seq_clean(x, onehot) # important
 	new_onehot = onehot.clone()
@@ -56,7 +56,7 @@ def seq_last_element(x, onehot):
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	check_(x, onehot)
+	_check(x, onehot)
 
 	b,t,f = x.size()
 	indexs = torch.sum(onehot[...,None], dim=1)-1 # (b,t,1) > (b,1) # -1 because index is always 1 unit less than length
@@ -70,7 +70,7 @@ def seq_min_pooling(x, onehot):
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	check_(x, onehot)
+	_check(x, onehot)
 
 	b,t,f = x.size()
 	new_onehot = onehot.clone()
@@ -85,7 +85,7 @@ def seq_max_pooling(x, onehot):
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	check_(x, onehot)
+	_check(x, onehot)
 
 	b,t,f = x.size()
 	new_onehot = onehot.clone()
@@ -113,7 +113,7 @@ def seq_min_max_norm(x, onehot):
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	check_(x, onehot)
+	_check(x, onehot)
 
 	min_ = seq_min_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
 	max_ = seq_max_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
@@ -126,7 +126,7 @@ def seq_avg_norm(x, onehot):
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	check_(x, onehot)
+	_check(x, onehot)
 	assert torch.all(x>=0)
 
 	avg_ = seq_avg_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
@@ -137,7 +137,7 @@ def seq_sum_norm(x, onehot):
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	check_(x, onehot)
+	_check(x, onehot)
 	assert torch.all(x>=0)
 
 	sum_ = seq_sum_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
@@ -170,7 +170,7 @@ def serial_to_parallel(x, onehot,
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	check_(x, onehot)
+	_check(x, onehot)
 
 	IMD = onehot.shape[1]
 	s2p_mapping_indexs = (torch.cumsum(onehot, 1)-1).masked_fill(~onehot, IMD)
