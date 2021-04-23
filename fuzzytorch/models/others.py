@@ -282,7 +282,7 @@ class TemporalEncoding(nn.Module):
 			te_gate = torch.sigmoid(self.te_gate)
 		elif self.scale_mode=='hardsigmoid':
 			#te_gate = F.hardsigmoid(self.te_gate)
-			te_gate = torch.sigmoid(self.te_gate*1e2)
+			te_gate = torch.sigmoid(self.te_gate*1e1)
 		elif self.scale_mode=='softmax':
 			te_gate = torch.softmax(self.te_gate, dim=-1)
 		else:
