@@ -33,6 +33,7 @@ class SelfAttn(nn.Module):
 		residual_dropout=0.0,
 		bias=True,
 		uses_length_wise_batchnorm=1,
+		mlp_k=1,
 		**kwargs):
 		super().__init__()
 
@@ -55,6 +56,7 @@ class SelfAttn(nn.Module):
 		self.residual_dropout = residual_dropout
 		self.bias = bias
 		self.uses_length_wise_batchnorm = uses_length_wise_batchnorm
+		self.mlp_k = mlp_k
 
 		### ATTN
 		attn_kwargs = {
@@ -80,7 +82,7 @@ class SelfAttn(nn.Module):
 			'dropout':self.mlp_dropout,
 			'last_activation':'linear', # transformer
 		}
-		self.mlp = MLP(self.input_dims, self.output_dims, [self.input_dims*2]*1, **mlp_kwargs)
+		self.mlp = MLP(self.input_dims, self.output_dims, [int(self.input_dims*self.mlp_k)]*1, **mlp_kwargs)
 		
 		### BATCH NORM
 		# MaskedBatchNorm1d is buggy?
