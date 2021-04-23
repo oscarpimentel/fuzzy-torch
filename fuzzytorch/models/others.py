@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F 
 from ..utils import tensor_to_numpy
-from .basics import Linear
+from .basics import Linear, MLP
 from . import utils as utils
 import flamingchoripan.strings as strings
 import numpy as np
@@ -39,7 +39,7 @@ def cyclic_mod(x, a, b):
 	assert b>a
 	return (x-a)%(b-a)+a
 	
-def _te(te_ws, te_phases, ntime,
+def xxx(te_ws, te_phases, ntime,
 	uses_linear_term=False, # False* True
 	):
 	'''
@@ -64,7 +64,7 @@ def _te(te_ws, te_phases, ntime,
 	#te_ws.dtype, te_phases.dtype, ntime.dtype)
 	return encoding
 
-def xxx(te_ws, te_phases, ntime):
+def _te(te_ws, te_phases, ntime):
 	'''
 	te_ws (f)
 	te_phases (f)
@@ -85,7 +85,7 @@ class FILM(nn.Module):
 		in_dropout=0.0,
 		out_dropout=0.0,
 		mod_dropout=0.0,
-		bias=True,
+		bias=False, # True False # important????
 		**kwargs):
 		super().__init__()
 
@@ -108,9 +108,11 @@ class FILM(nn.Module):
 		}
 		self.is_dummy = self.mod_input_dims==0
 		if not self.is_dummy:
-			#self.gamma_f = Linear(self.mod_input_dims, self.mod_output_dims, bias_value=1., **linear_kwargs)
-			#self.beta_f = Linear(self.mod_input_dims, self.mod_output_dims, **linear_kwargs)
+			#self.gamma_f = Linear(self.mod_input_dims, self.mod_output_dims, bias_value=1., **linear_kwargs); self.beta_f = Linear(self.mod_input_dims, self.mod_output_dims, **linear_kwargs)
 			self.gamma_beta_f = Linear(self.mod_input_dims, self.mod_output_dims, split_out=2, **linear_kwargs)
+			#self.gamma_beta_mlp = MLP(self.mod_input_dims, self.mod_output_dims*2, [self.mod_input_dims], activation='relu')
+			#print('gamma_beta_mlp',self.gamma_beta_mlp)
+
 			self.in_dropout_f = nn.Dropout(self.in_dropout)
 			self.out_dropout_f = nn.Dropout(self.out_dropout)
 			self.mod_dropout_f = nn.Dropout(self.mod_dropout)
@@ -123,8 +125,13 @@ class FILM(nn.Module):
 		if not self.is_dummy:
 			x = self.in_dropout_f(x)
 			mod = self.mod_dropout_f(mod)
-			#gamma, beta = self.gamma_f(mod), self.beta_f(mod); #x = x*gamma+beta
-			gamma, beta = self.gamma_beta_f(mod); x = x*(1+gamma)+beta
+			#gamma, beta = self.gamma_f(mod), self.beta_f(mod)
+			#gamma = self.gamma_f(mod); beta = self.beta_f(mod); x = x*torch.sigmoid(gamma)+beta
+			gamma, beta = self.gamma_beta_f(mod)
+			#gamma, beta = torch.chunk(self.gamma_beta_mlp(mod), 2, dim=-1)
+
+			x = x*gamma+beta
+			#x = x*torch.sigmoid(gamma)+beta
 			x = self.out_dropout_f(x)
 		return x
 
@@ -151,11 +158,12 @@ class FILM(nn.Module):
 
 class TemporalEncoding(nn.Module):
 	def __init__(self, te_features, max_te_period,
-		min_te_period=None,
+		min_te_period=None, # 2 None
 		out_dropout=0.0,
 		ktime=1,
 		requires_grad=False, # False True
 		random_init=False, # True False
+		scale_mode='softmax', # sigmoid hardsigmoid softmax
 		**kwargs):
 		super().__init__()
 
@@ -170,6 +178,7 @@ class TemporalEncoding(nn.Module):
 		self.ktime = ktime
 		self.requires_grad = requires_grad
 		self.random_init = random_init
+		self.scale_mode = scale_mode
 		self.reset()
 
 	def reset(self):
@@ -188,6 +197,7 @@ class TemporalEncoding(nn.Module):
 			self.te_ws = torch.nn.Parameter(torch.as_tensor(self.initial_ws), requires_grad=self.requires_grad) # True False
 			self.te_phases = torch.nn.Parameter(torch.as_tensor(self.initial_phases), requires_grad=self.requires_grad) # True False
 
+		self.te_gate = torch.nn.Parameter(torch.zeros_like(self.te_ws), requires_grad=True) # True False
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
 
 	def generate_initial_tensors(self):
@@ -197,9 +207,8 @@ class TemporalEncoding(nn.Module):
 			phases = np.array([math.pi/2 if i%2==0 else 0 for i in range(0, 2*l)]).astype(np.float32)
 		else:
 			periods = np.linspace(self.max_te_period, self.min_te_period, self.get_output_dims()).astype(np.float32)
+			phases = np.zeros_like(periods).astype(np.float32)
 		
-		#print(periods, phases)
-		#assert 0
 		return periods, phases
 
 	def xafasf(self):
@@ -225,6 +234,8 @@ class TemporalEncoding(nn.Module):
 			'max_te_period':self.max_te_period,
 			'out_dropout':self.out_dropout,
 			'te_periods':[p for p in tensor_to_numpy(self.get_te_periods())],
+			'te_phases':[p for p in tensor_to_numpy(self.get_te_phases())],
+			'scale_mode':self.scale_mode,
 			}, ', ', '=')
 		return txt
 
@@ -237,6 +248,7 @@ class TemporalEncoding(nn.Module):
 			'te_ws':tensor_to_numpy(self.get_te_ws()),
 			'te_periods':tensor_to_numpy(self.get_te_periods()),
 			'te_phases':tensor_to_numpy(self.get_te_phases()),
+			'te_gate':tensor_to_numpy(self.get_te_gate()),
 			'ktime':self.ktime,
 			}
 		return d
@@ -251,10 +263,12 @@ class TemporalEncoding(nn.Module):
 		return self.te_features
 
 	def get_te_ws(self):
-		#te_ws = self.te_ws
-		#te_ws = cyclic_mod(self.te_ws, self.min_w, self.max_w) # horrible
-		te_ws = softclamp(self.te_ws, self.min_w, self.max_w)
-		#te_ws = softclamp(self.te_ws, 0., self.max_w)
+		if self.requires_grad:
+			#te_ws = cyclic_mod(self.te_ws, self.min_w, self.max_w) # horrible
+			te_ws = softclamp(self.te_ws, self.min_w, self.max_w)
+			#te_ws = softclamp(self.te_ws, 0., self.max_w)
+		else:
+			te_ws = self.te_ws
 		return te_ws
 
 	def get_te_periods(self):
@@ -262,6 +276,21 @@ class TemporalEncoding(nn.Module):
 		te_nperiods = self.w2period(te_ws)
 		te_periods = self.ntime2time(te_nperiods)
 		return te_periods
+
+	def get_te_gate(self):
+		if self.scale_mode=='sigmoid':
+			te_gate = torch.sigmoid(self.te_gate)
+		elif self.scale_mode=='hardsigmoid':
+			#te_gate = F.hardsigmoid(self.te_gate)
+			te_gate = torch.sigmoid(self.te_gate*1e2)
+		elif self.scale_mode=='softmax':
+			te_gate = torch.softmax(self.te_gate, dim=-1)
+		else:
+			raise Exception(f'no mode {self.scale_mode}')
+
+		if self.training:
+			print('te_gate',te_gate)
+		return te_gate
 
 	def get_te_phases(self):
 		#te_phases = torch.tanh(self.te_phases)*te_periods
@@ -276,6 +305,7 @@ class TemporalEncoding(nn.Module):
 		te_phases = self.get_te_phases()
 
 		encoding = _te(te_ws, te_phases, ntime)
+		encoding = self.get_te_gate()*encoding # element wise gate
 		encoding = self.out_dropout_f(encoding)
 		#print(encoding.shape, encoding.device)
 		return encoding

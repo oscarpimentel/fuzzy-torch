@@ -361,6 +361,7 @@ class MLTimeSelfAttn(nn.Module):
 		attn_dropout=0.0,
 		bias=True,
 		uses_length_wise_batchnorm=1,
+		scale_mode='softmax',
 		**kwargs):
 		super().__init__()
 
@@ -385,6 +386,7 @@ class MLTimeSelfAttn(nn.Module):
 		self.attn_dropout = attn_dropout
 		self.bias = bias
 		self.uses_length_wise_batchnorm = uses_length_wise_batchnorm
+		self.scale_mode = scale_mode
 
 		activations = [activation]*(len(self.embd_dims_list)-1) # create activations along
 		if not self.last_activation is None:
@@ -409,7 +411,7 @@ class MLTimeSelfAttn(nn.Module):
 			}
 			self_attn = TimeSelfAttn(input_dims_, output_dims_, **attn_kwargs)
 			self.self_attns += [self_attn]
-			te_mod = TemporalEncoding(self.te_features, self.max_te_period)
+			te_mod = TemporalEncoding(self.te_features, self.max_te_period, scale_mode=self.scale_mode)
 			print('te_mod:',te_mod)
 			self.te_mods += [te_mod]
 
@@ -417,6 +419,7 @@ class MLTimeSelfAttn(nn.Module):
 				#'in_dropout':self.dropout,
 			}
 			film = FILM(te_mod.get_output_dims(), input_dims_, **film_kwargs)
+			print('film:',film)
 			self.te_films += [film]
 
 		self.reset()
