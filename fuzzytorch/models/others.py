@@ -289,7 +289,8 @@ class TemporalEncoding(nn.Module):
 			raise Exception(f'no mode {self.scale_mode}')
 
 		if self.training:
-			print('te_gate',te_gate)
+			#print('te_gate',te_gate)
+			pass
 		return te_gate
 
 	def get_te_phases(self):

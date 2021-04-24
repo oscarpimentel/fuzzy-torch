@@ -36,7 +36,6 @@ class SelfAttn(nn.Module):
 		mlp_k=1,
 		**kwargs):
 		super().__init__()
-
 		### CHECKS
 		assert input_dims%num_heads==0
 		assert in_dropout>=0 and in_dropout<=1
@@ -57,7 +56,10 @@ class SelfAttn(nn.Module):
 		self.bias = bias
 		self.uses_length_wise_batchnorm = uses_length_wise_batchnorm
 		self.mlp_k = mlp_k
+		self.reset()
 
+	def reset(self):
+		self.head_dim = self.input_dims//self.num_heads
 		### ATTN
 		attn_kwargs = {
 			'dropout':self.attn_dropout,
@@ -90,10 +92,6 @@ class SelfAttn(nn.Module):
 		self.mlp_bn = MaskedBatchNorm1d(self.input_dims) if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
 
 		self.activation_f = non_linear.get_activation(self.activation)
-		self.reset()
-
-	def reset(self):
-		pass
 
 	def register_src_mask(self, max_curve_length, device):
 		max_curve_length_changed = not max_curve_length==self.max_curve_length
@@ -115,6 +113,7 @@ class SelfAttn(nn.Module):
 		'output_dims':self.output_dims,
 		'max_curve_length':self.max_curve_length,
 		'num_heads':self.num_heads,
+		'head_dim':self.head_dim,
 		'activation':self.activation,
 		'in_dropout':self.in_dropout,
 		'out_dropout':self.out_dropout,
