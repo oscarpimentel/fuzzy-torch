@@ -33,7 +33,7 @@ class SelfAttn(nn.Module):
 		residual_dropout=0.0,
 		bias=True,
 		uses_length_wise_batchnorm=1,
-		mlp_k=1,
+		mlp_k=.5, # ajusted to fit rnn parameters
 		**kwargs):
 		super().__init__()
 		### CHECKS

@@ -233,8 +233,8 @@ class TemporalEncoding(nn.Module):
 			'min_te_period':self.min_te_period,
 			'max_te_period':self.max_te_period,
 			'out_dropout':self.out_dropout,
-			'te_periods':[p for p in tensor_to_numpy(self.get_te_periods())],
-			'te_phases':[p for p in tensor_to_numpy(self.get_te_phases())],
+			'te_periods':[f'{p:.1f}' for p in tensor_to_numpy(self.get_te_periods())],
+			'te_phases':[f'{p:.1f}' for p in tensor_to_numpy(self.get_te_phases())],
 			'scale_mode':self.scale_mode,
 			}, ', ', '=')
 		return txt
