@@ -85,7 +85,7 @@ class FILM(nn.Module):
 		in_dropout=0.0,
 		out_dropout=0.0,
 		mod_dropout=0.0,
-		bias=False, # True False # important????
+		bias=True, # True False # important??????
 		**kwargs):
 		super().__init__()
 
