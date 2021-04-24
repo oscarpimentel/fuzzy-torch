@@ -163,7 +163,7 @@ class TemporalEncoding(nn.Module):
 		ktime=1,
 		requires_grad=False, # False True
 		random_init=False, # True False
-		scale_mode='softmax', # sigmoid hardsigmoid softmax
+		scale_mode=None, # None sigmoid hardsigmoid softmax
 		**kwargs):
 		super().__init__()
 
@@ -197,7 +197,7 @@ class TemporalEncoding(nn.Module):
 			self.te_ws = torch.nn.Parameter(torch.as_tensor(self.initial_ws), requires_grad=self.requires_grad) # True False
 			self.te_phases = torch.nn.Parameter(torch.as_tensor(self.initial_phases), requires_grad=self.requires_grad) # True False
 
-		self.te_gate = torch.nn.Parameter(torch.zeros_like(self.te_ws), requires_grad=True) # True False
+		self.te_gate = torch.nn.Parameter(torch.zeros_like(self.te_ws), requires_grad=False if self.scale_mode is None else True) # True False
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
 
 	def generate_initial_tensors(self):
@@ -278,7 +278,9 @@ class TemporalEncoding(nn.Module):
 		return te_periods
 
 	def get_te_gate(self):
-		if self.scale_mode=='sigmoid':
+		if self.scale_mode is None:
+			te_gate = self.te_gate+1
+		elif self.scale_mode=='sigmoid':
 			te_gate = torch.sigmoid(self.te_gate)
 		elif self.scale_mode=='hardsigmoid':
 			#te_gate = F.hardsigmoid(self.te_gate)
