@@ -32,8 +32,9 @@ class SelfAttn(nn.Module):
 		mlp_dropout=0.0,
 		residual_dropout=0.0,
 		bias=True,
-		uses_length_wise_batchnorm=1,
-		mlp_k=.5, # ajusted to fit rnn parameters
+		uses_length_wise_batchnorm=True,
+		mlp_k=2, # ajusted to fit rnn parameters
+		bypass_mlp=False,
 		**kwargs):
 		super().__init__()
 		### CHECKS
@@ -56,10 +57,12 @@ class SelfAttn(nn.Module):
 		self.bias = bias
 		self.uses_length_wise_batchnorm = uses_length_wise_batchnorm
 		self.mlp_k = mlp_k
+		self.bypass_mlp = bypass_mlp
 		self.reset()
 
 	def reset(self):
 		self.head_dim = self.input_dims//self.num_heads
+
 		### ATTN
 		attn_kwargs = {
 			'dropout':self.attn_dropout,
@@ -74,6 +77,7 @@ class SelfAttn(nn.Module):
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
 		self.res1_dropout_f = nn.Dropout(self.residual_dropout)
 		self.res2_dropout_f = nn.Dropout(self.residual_dropout)
+		self.attn_bn = MaskedBatchNorm1d(self.input_dims) if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
 
 		### MLP
 		mlp_kwargs = {
@@ -84,13 +88,10 @@ class SelfAttn(nn.Module):
 			'dropout':self.mlp_dropout,
 			'last_activation':'linear', # transformer
 		}
-		self.mlp = MLP(self.input_dims, self.output_dims, [int(self.input_dims*self.mlp_k)]*1, **mlp_kwargs)
+		if not self.bypass_mlp:
+			self.mlp = MLP(self.input_dims, self.output_dims, [int(self.input_dims*self.mlp_k)]*1, **mlp_kwargs)
+			self.mlp_bn = MaskedBatchNorm1d(self.input_dims) if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
 		
-		### BATCH NORM
-		# MaskedBatchNorm1d is buggy?
-		self.attn_bn = MaskedBatchNorm1d(self.input_dims) if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
-		self.mlp_bn = MaskedBatchNorm1d(self.input_dims) if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
-
 		self.activation_f = non_linear.get_activation(self.activation)
 
 	def register_src_mask(self, max_curve_length, device):
@@ -120,6 +121,8 @@ class SelfAttn(nn.Module):
 		'attn_dropout':self.attn_dropout,
 		'mlp_dropout':self.mlp_dropout,
 		'bias':self.bias,
+		'mlp_k':self.mlp_k,
+		'bypass_mlp':self.bypass_mlp,
 		}, ', ', '=')
 		return txt
 
@@ -147,14 +150,15 @@ class SelfAttn(nn.Module):
 
 		new_onehot = onehot.clone()
 		new_onehot[:,0] = True # forced to avoid errors of empty bands sequences
+		x = self.in_dropout_f(x)
 
+		### ATTN
 		attn_kwargs = {
 			'key_padding_mask':~new_onehot,
 			'attn_mask':self.src_mask,
 			'mul_attn_mask':mul_attn_mask,
 			'need_weights':True,
-		}
-		x = self.in_dropout_f(x)
+			}
 		queries = x.permute(1,0,2)
 		keys = x.permute(1,0,2)
 		values = x.permute(1,0,2)
@@ -169,8 +173,12 @@ class SelfAttn(nn.Module):
 		x = x.permute(1,0,2)
 		x = self.attn_bn(x, onehot)
 
-		x = self.mlp(x)+self.res2_dropout_f(x) # res
-		x = self.mlp_bn(x, onehot)
+		### ATTN-MLP
+		if not self.bypass_mlp:
+			x = self.mlp(x)+self.res2_dropout_f(x) # res
+			x = self.mlp_bn(x, onehot)
+
+		### ACTIVATION
 		x = self.activation_f(x, dim=-1)
 		x = self.out_dropout_f(x)
 		#print(scores.shape)
@@ -398,6 +406,18 @@ class MLTimeSelfAttn(nn.Module):
 		for k in range(len(self.embd_dims_list)-1):
 			input_dims_ = self.embd_dims_list[k]
 			output_dims_ = self.embd_dims_list[k+1]
+			
+			te_mod = TemporalEncoding(self.te_features, self.max_te_period, scale_mode=self.scale_mode)
+			print('te_mod:',te_mod)
+			self.te_mods += [te_mod]
+
+			film_kwargs = {
+				#'in_dropout':self.dropout,
+				}
+			film = FILM(te_mod.get_output_dims(), input_dims_, **film_kwargs)
+			print('film:',film)
+			self.te_films += [film]
+
 			attn_kwargs = {
 				'max_curve_length':self.max_curve_length,
 				'num_heads':self.num_heads,
@@ -407,19 +427,11 @@ class MLTimeSelfAttn(nn.Module):
 				'attn_dropout':self.attn_dropout,
 				'bias':self.bias,
 				'uses_length_wise_batchnorm':self.uses_length_wise_batchnorm,
-			}
+				'mlp_k':0.5,
+				'bypass_mlp':0,
+				}
 			self_attn = TimeSelfAttn(input_dims_, output_dims_, **attn_kwargs)
 			self.self_attns += [self_attn]
-			te_mod = TemporalEncoding(self.te_features, self.max_te_period, scale_mode=self.scale_mode)
-			print('te_mod:',te_mod)
-			self.te_mods += [te_mod]
-
-			film_kwargs = {
-				#'in_dropout':self.dropout,
-			}
-			film = FILM(te_mod.get_output_dims(), input_dims_, **film_kwargs)
-			print('film:',film)
-			self.te_films += [film]
 
 		self.reset()
 
@@ -472,7 +484,7 @@ class MLTimeSelfAttn(nn.Module):
 		scores = []
 		for k,(te_film,self_attn,te_mod) in enumerate(zip(self.te_films, self.self_attns, self.te_mods)):
 			te = te_mod(time)
-			x = te_film(x, te)
+			x = te_film(x, te, onehot)
 			x, _scores = self_attn(x, onehot,
 				mul_attn_mask,
 				return_only_actual_scores,

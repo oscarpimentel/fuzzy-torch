@@ -11,6 +11,7 @@ from . import utils as utils
 import flamingchoripan.strings as strings
 import numpy as np
 import math
+from .attn.batch_norms import LayerNorm, MaskedBatchNorm1d
 
 ###################################################################################################################################################
 
@@ -64,7 +65,7 @@ def xxx(te_ws, te_phases, ntime,
 	#te_ws.dtype, te_phases.dtype, ntime.dtype)
 	return encoding
 
-def _te(te_ws, te_phases, ntime):
+def _te(te_ws, te_phases, te_scales, ntime):
 	'''
 	te_ws (f)
 	te_phases (f)
@@ -75,7 +76,8 @@ def _te(te_ws, te_phases, ntime):
 	for i in range(0, len(te_ws)):
 		w = te_ws[i]
 		phi = te_phases[i]
-		encoding[...,i] = torch.sin(w*ntime+phi)
+		scale = te_scales[i]
+		encoding[...,i] = scale*torch.sin(w*ntime+phi)
 	return encoding
 
 ###################################################################################################################################################
@@ -85,7 +87,7 @@ class FILM(nn.Module):
 		in_dropout=0.0,
 		out_dropout=0.0,
 		mod_dropout=0.0,
-		bias=True, # True False # important??????
+		#bias=True, # True False # useful only when using an activation function?
 		**kwargs):
 		super().__init__()
 
@@ -98,26 +100,36 @@ class FILM(nn.Module):
 		self.in_dropout = in_dropout
 		self.out_dropout = out_dropout
 		self.mod_dropout = mod_dropout
-		self.bias = bias
+		#self.bias = bias
 		self.reset()
 
 	def reset(self):
 		linear_kwargs = {
 			'activation':'linear',
-			'bias':self.bias,
+			#'bias':self.bias,
 		}
 		self.is_dummy = self.mod_input_dims==0
 		if not self.is_dummy:
-			#self.gamma_f = Linear(self.mod_input_dims, self.mod_output_dims, bias_value=1., **linear_kwargs); self.beta_f = Linear(self.mod_input_dims, self.mod_output_dims, **linear_kwargs)
+			#self.gamma_f = Linear(self.mod_input_dims+self.mod_output_dims, self.mod_output_dims, **linear_kwargs)
+			#self.beta_f = Linear(self.mod_input_dims, self.mod_output_dims, bias=False, **linear_kwargs) # False True
 			self.gamma_beta_f = Linear(self.mod_input_dims, self.mod_output_dims, split_out=2, **linear_kwargs)
+
 			#self.gamma_beta_mlp = MLP(self.mod_input_dims, self.mod_output_dims*2, [self.mod_input_dims], activation='relu')
-			#print('gamma_beta_mlp',self.gamma_beta_mlp)
+
+			self.bn = MaskedBatchNorm1d(self.mod_output_dims)# if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
 
 			self.in_dropout_f = nn.Dropout(self.in_dropout)
-			self.out_dropout_f = nn.Dropout(self.out_dropout)
+			
 			self.mod_dropout_f = nn.Dropout(self.mod_dropout)
+			self.out_dropout_f = nn.Dropout(self.out_dropout)
 
-	def forward(self, x, mod, **kwargs):
+
+	def mod_x(self, x, mod):
+		gamma, beta = self.gamma_beta_f(mod)
+		x = x*gamma+beta
+		return x
+
+	def forward(self, x, mod, onehot, **kwargs):
 		# x (b,t,fx)
 		# mod (b,t,fm)
 		assert x.shape[-1]==self.mod_output_dims
@@ -125,13 +137,23 @@ class FILM(nn.Module):
 		if not self.is_dummy:
 			x = self.in_dropout_f(x)
 			mod = self.mod_dropout_f(mod)
-			#gamma, beta = self.gamma_f(mod), self.beta_f(mod)
-			#gamma = self.gamma_f(mod); beta = self.beta_f(mod); x = x*torch.sigmoid(gamma)+beta
-			gamma, beta = self.gamma_beta_f(mod)
-			#gamma, beta = torch.chunk(self.gamma_beta_mlp(mod), 2, dim=-1)
+			x = self.mod_x(x, mod)+self.out_dropout_f(x) # res
+			x = self.bn(x, onehot)
 
-			x = x*gamma+beta
-			#x = x*torch.sigmoid(gamma)+beta
+		return x
+
+	def xx(self, x, mod, **kwargs):
+		# x (b,t,fx)
+		# mod (b,t,fm)
+		assert x.shape[-1]==self.mod_output_dims
+
+		if not self.is_dummy:
+			x = self.in_dropout_f(x)
+			mod = self.mod_dropout_f(mod)
+			gamma = self.gamma_f(torch.cat([x,mod], dim=-1))
+			beta = self.beta_f(mod)
+			x = gamma*(x+beta) # best?
+			#x = torch.sigmoid(gamma)*(x+beta) # best?
 			x = self.out_dropout_f(x)
 		return x
 
@@ -145,7 +167,7 @@ class FILM(nn.Module):
 		'in_dropout':self.in_dropout,
 		'out_dropout':self.out_dropout,
 		'mod_dropout':self.mod_dropout,
-		'bias':self.bias,
+		#'bias':self.bias,
 		}, ', ', '=')
 		return txt
 
@@ -160,6 +182,7 @@ class TemporalEncoding(nn.Module):
 	def __init__(self, te_features, max_te_period,
 		min_te_period=None, # 2 None
 		out_dropout=0.0,
+		scale_dropout=0.0,
 		ktime=1,
 		requires_grad=False, # False True
 		random_init=False, # True False
@@ -175,6 +198,7 @@ class TemporalEncoding(nn.Module):
 		self.max_te_period = max_te_period
 		self.min_te_period = min_te_period
 		self.out_dropout = out_dropout
+		self.scale_dropout = scale_dropout
 		self.ktime = ktime
 		self.requires_grad = requires_grad
 		self.random_init = random_init
@@ -197,8 +221,9 @@ class TemporalEncoding(nn.Module):
 			self.te_ws = torch.nn.Parameter(torch.as_tensor(self.initial_ws), requires_grad=self.requires_grad) # True False
 			self.te_phases = torch.nn.Parameter(torch.as_tensor(self.initial_phases), requires_grad=self.requires_grad) # True False
 
-		self.te_gate = torch.nn.Parameter(torch.zeros_like(self.te_ws), requires_grad=False if self.scale_mode is None else True) # True False
+		self.te_gate = torch.nn.Parameter(torch.zeros_like(self.te_ws), requires_grad=False if self.scale_mode is None else True) # True False # ahmm
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
+		self.scale_dropout_f = nn.Dropout(self.scale_dropout)
 
 	def generate_initial_tensors(self):
 		if self.min_te_period is None:
@@ -306,9 +331,12 @@ class TemporalEncoding(nn.Module):
 		ntime = self.time2ntime(time)
 		te_ws = self.get_te_ws()
 		te_phases = self.get_te_phases()
+		te_scales = self.get_te_gate()
 
-		encoding = _te(te_ws, te_phases, ntime)
-		encoding = self.get_te_gate()*encoding # element wise gate
+		if self.scale_dropout>0:
+			te_scales = torch.cat([te_scales[0][None], self.scale_dropout_f(te_scales[1:])], dim=0)
+		encoding = _te(te_ws, te_phases, te_scales, ntime)
+		#encoding = self.get_te_gate()*encoding # element wise gate
 		encoding = self.out_dropout_f(encoding)
 		#print(encoding.shape, encoding.device)
 		return encoding
