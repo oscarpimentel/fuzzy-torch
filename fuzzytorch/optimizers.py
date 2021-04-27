@@ -9,26 +9,32 @@ import torch
 ###################################################################################################################################################
 
 class LossOptimizer:
-	def __init__(self, to_optimize_model, opt_class,
-		opt_kwargs:dict={},
-		decay_epochs_delta:int=1,
-		decay_kwargs:dict={},
+	def __init__(self, to_optimize_model, opt_class, opt_kwargs_f,
 		clip_grad:float=1.,
 		model_get_parameters_f=None,
-		):
+		**kwargs):
 		self.to_optimize_model = to_optimize_model
 		self.opt_class = opt_class
-		self.opt_kwargs = opt_kwargs
-		self.decay_epochs_delta = decay_epochs_delta
-		self.decay_kwargs = decay_kwargs
+		self.opt_kwargs_f = opt_kwargs_f
 		self.clip_grad = clip_grad
 		self.model_get_parameters_f = model_get_parameters_f
+		self.reset()
+
+	def reset(self):
 		self.epoch_counter = 0
+		self.calcule_opt_kwargs()
 		self.generate_mounted_optimizer()
+
+	def calcule_opt_kwargs(self):
+		self.opt_kwargs = {}
+		for k in self.opt_kwargs_f.keys():
+			v = self.opt_kwargs_f[k](self.epoch_counter)
+			self.opt_kwargs[k] = v
 
 	def generate_mounted_optimizer(self):
 		assert isinstance(self.to_optimize_model, nn.Module)
-		self.optimizer = self.opt_class(self.get_model_parameters(), **self.opt_kwargs)
+		self.optimizer = self.opt_class(self.get_model_parameters())
+		self.update_opt_kwargs()
 
 	def get_model_parameters(self):
 		return self.to_optimize_model.parameters() if self.model_get_parameters_f is None else getattr(self.to_optimize_model, self.model_get_parameters_f)()
@@ -62,16 +68,24 @@ class LossOptimizer:
 	def get_opt_kwargs(self):
 		return list(self.opt_kwargs.keys())
 
-	def get_decay_kwargs(self):
-		return list(self.decay_kwargs.keys())
+	def update(self):
+		self.epoch_counter += 1
+		self.calcule_opt_kwargs()
+		#print(self.opt_kwargs)
+		self.update_opt_kwargs()
 
-	def epoch_update(self):
+	def update_opt_kwargs(self):
+		for k in self.opt_kwargs.keys():
+			self.optimizer.param_groups[0][k] = self.opt_kwargs[k]
+
+	def _____(self):
 		if len(self.get_decay_kwargs())>0:
 			self.epoch_counter += 1
 			if self.epoch_counter >= self.decay_epochs_delta:
 				self.epoch_counter = 0
 				for key in self.decay_kwargs.keys():
-					self.optimizer.param_groups[0][key] *= self.decay_kwargs[key]
+					for g in self.optimizer.param_groups:
+						g[key] = self.decay_kwargs[key]
 
 	def get_kwarg_value(self, key):
 		return self.optimizer.param_groups[0][key]

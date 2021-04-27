@@ -146,6 +146,7 @@ class LossMonitor(object):
 		self.counter_k.update()
 
 	def epoch_update(self):
+		self.optimizer.update()
 		self.counter_epoch.update()
 		if self.counter_epoch.check('earlystop_epoch'):
 			raise ex.TrainingInterruptedError()

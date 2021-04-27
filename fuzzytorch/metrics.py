@@ -19,6 +19,8 @@ class MetricResult():
 		self.reduction_mode = reduction_mode
 		if self.reduction_mode=='mean':
 			self.batch_metric = self.batch_metric_.mean()[None]
+		elif self.reduction_mode=='sum':
+			self.batch_metric = self.batch_metric_.sum()[None]
 
 	def get_metric(self,
 		get_tensor=False,

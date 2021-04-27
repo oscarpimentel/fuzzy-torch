@@ -80,101 +80,7 @@ def _te(te_ws, te_phases, te_scales, ntime):
 		encoding[...,i] = scale*torch.sin(w*ntime+phi)
 	return encoding
 
-###################################################################################################################################################
 
-class FILM(nn.Module):
-	def __init__(self, mod_input_dims:int, mod_output_dims:int,
-		in_dropout=0.0,
-		out_dropout=0.0,
-		mod_dropout=0.0,
-		#bias=True, # True False # useful only when using an activation function?
-		**kwargs):
-		super().__init__()
-
-		### CHECKS
-		assert in_dropout>=0 and in_dropout<=1
-		assert out_dropout>=0 and out_dropout<=1
-
-		self.mod_input_dims = mod_input_dims
-		self.mod_output_dims = mod_output_dims
-		self.in_dropout = in_dropout
-		self.out_dropout = out_dropout
-		self.mod_dropout = mod_dropout
-		#self.bias = bias
-		self.reset()
-
-	def reset(self):
-		linear_kwargs = {
-			'activation':'linear',
-			#'bias':self.bias,
-		}
-		self.is_dummy = self.mod_input_dims==0
-		if not self.is_dummy:
-			#self.gamma_f = Linear(self.mod_input_dims+self.mod_output_dims, self.mod_output_dims, **linear_kwargs)
-			#self.beta_f = Linear(self.mod_input_dims, self.mod_output_dims, bias=False, **linear_kwargs) # False True
-			self.gamma_beta_f = Linear(self.mod_input_dims, self.mod_output_dims, split_out=2, **linear_kwargs)
-
-			#self.gamma_beta_mlp = MLP(self.mod_input_dims, self.mod_output_dims*2, [self.mod_input_dims], activation='relu')
-
-			self.bn = MaskedBatchNorm1d(self.mod_output_dims)# if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
-
-			self.in_dropout_f = nn.Dropout(self.in_dropout)
-			
-			self.mod_dropout_f = nn.Dropout(self.mod_dropout)
-			self.out_dropout_f = nn.Dropout(self.out_dropout)
-
-
-	def mod_x(self, x, mod):
-		gamma, beta = self.gamma_beta_f(mod)
-		x = x*gamma+beta
-		return x
-
-	def forward(self, x, mod, onehot, **kwargs):
-		# x (b,t,fx)
-		# mod (b,t,fm)
-		assert x.shape[-1]==self.mod_output_dims
-
-		if not self.is_dummy:
-			x = self.in_dropout_f(x)
-			mod = self.mod_dropout_f(mod)
-			x = self.mod_x(x, mod)+self.out_dropout_f(x) # res
-			x = self.bn(x, onehot)
-
-		return x
-
-	def xx(self, x, mod, **kwargs):
-		# x (b,t,fx)
-		# mod (b,t,fm)
-		assert x.shape[-1]==self.mod_output_dims
-
-		if not self.is_dummy:
-			x = self.in_dropout_f(x)
-			mod = self.mod_dropout_f(mod)
-			gamma = self.gamma_f(torch.cat([x,mod], dim=-1))
-			beta = self.beta_f(mod)
-			x = gamma*(x+beta) # best?
-			#x = torch.sigmoid(gamma)*(x+beta) # best?
-			x = self.out_dropout_f(x)
-		return x
-
-	def __len__(self):
-		return utils.count_parameters(self)
-		
-	def extra_repr(self):
-		txt = strings.get_string_from_dict({
-		'mod_input_dims':self.mod_input_dims,
-		'mod_output_dims':self.mod_output_dims,
-		'in_dropout':self.in_dropout,
-		'out_dropout':self.out_dropout,
-		'mod_dropout':self.mod_dropout,
-		#'bias':self.bias,
-		}, ', ', '=')
-		return txt
-
-	def __repr__(self):
-		txt = f'FILM({self.extra_repr()})'
-		txt += f'({len(self):,}[p])'
-		return txt
 
 ###################################################################################################################################################
 
@@ -187,12 +93,14 @@ class TemporalEncoding(nn.Module):
 		requires_grad=False, # False True
 		random_init=False, # True False
 		scale_mode=None, # None sigmoid hardsigmoid softmax
+		time_noise=1/24, # regularization
 		**kwargs):
 		super().__init__()
 
 		### CHECKS
 		assert te_features>0
 		assert te_features%2==0
+		assert time_noise>=0
 
 		self.te_features = te_features
 		self.max_te_period = max_te_period
@@ -203,6 +111,7 @@ class TemporalEncoding(nn.Module):
 		self.requires_grad = requires_grad
 		self.random_init = random_init
 		self.scale_mode = scale_mode
+		self.time_noise = time_noise
 		self.reset()
 
 	def reset(self):
@@ -218,10 +127,12 @@ class TemporalEncoding(nn.Module):
 			#self.te_phases = torch.nn.Parameter(torch.normal(0., 0.1, size=[self.get_output_dims()]), requires_grad=True) # True False
 			pass
 		else:
-			self.te_ws = torch.nn.Parameter(torch.as_tensor(self.initial_ws), requires_grad=self.requires_grad) # True False
-			self.te_phases = torch.nn.Parameter(torch.as_tensor(self.initial_phases), requires_grad=self.requires_grad) # True False
+			self.te_ws = torch.nn.Parameter(torch.as_tensor(self.initial_ws), requires_grad=False) # True False
+			self.te_phases = torch.nn.Parameter(torch.as_tensor(self.initial_phases), requires_grad=False) # True False
 
+		self.scale_mode = None#'sigmoid'
 		self.te_gate = torch.nn.Parameter(torch.zeros_like(self.te_ws), requires_grad=False if self.scale_mode is None else True) # True False # ahmm
+		#self.te_gate = torch.nn.Parameter(torch.zeros_like(self.te_ws), requires_grad=True)
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
 		self.scale_dropout_f = nn.Dropout(self.scale_dropout)
 
@@ -261,6 +172,7 @@ class TemporalEncoding(nn.Module):
 			'te_periods':[f'{p:.1f}' for p in tensor_to_numpy(self.get_te_periods())],
 			'te_phases':[f'{p:.1f}' for p in tensor_to_numpy(self.get_te_phases())],
 			'scale_mode':self.scale_mode,
+			'time_noise':self.time_noise,
 			}, ', ', '=')
 		return txt
 
@@ -328,13 +240,22 @@ class TemporalEncoding(nn.Module):
 		# time (b,t)
 		assert len(time.shape)==2
 
+		if self.training and self.time_noise>0:
+			#print(time, time.device)
+			uniform_noise = torch.rand(size=time.shape, device=time.device)
+			uniform_noise = self.time_noise*2*(uniform_noise-0.5)
+			#print(uniform_noise)
+			time = time+uniform_noise
+			#print("2",time)
+
 		ntime = self.time2ntime(time)
 		te_ws = self.get_te_ws()
 		te_phases = self.get_te_phases()
 		te_scales = self.get_te_gate()
 
-		if self.scale_dropout>0:
-			te_scales = torch.cat([te_scales[0][None], self.scale_dropout_f(te_scales[1:])], dim=0)
+		#if self.scale_dropout>0:
+		#	te_scales = torch.cat([te_scales[0][None], self.scale_dropout_f(te_scales[1:])], dim=0)
+		#print('te_scales',te_scales[0])
 		encoding = _te(te_ws, te_phases, te_scales, ntime)
 		#encoding = self.get_te_gate()*encoding # element wise gate
 		encoding = self.out_dropout_f(encoding)
@@ -343,6 +264,142 @@ class TemporalEncoding(nn.Module):
 
 	def __len__(self):
 		return utils.count_parameters(self)
+
+###################################################################################################################################################
+
+class TimeFILM(nn.Module):
+	def __init__(self, input_dims:int, te_features, max_te_period,
+		in_dropout=0.0,
+		out_dropout=0.0,
+		mod_dropout=0.0,
+		#bias=True, # True False # useful only when using an activation function?
+		**kwargs):
+		super().__init__()
+
+		### CHECKS
+		assert in_dropout>=0 and in_dropout<=1
+		assert out_dropout>=0 and out_dropout<=1
+
+		self.input_dims = input_dims
+		self.te_features = te_features
+		self.max_te_period = max_te_period
+
+		self.in_dropout = in_dropout
+		self.out_dropout = out_dropout
+		self.mod_dropout = mod_dropout
+		#self.bias = bias
+		self.reset()
+
+	def reset(self):
+		linear_kwargs = {
+			'activation':'linear',
+			#'bias':self.bias,
+			}
+		self.is_dummy = self.input_dims==0
+		if not self.is_dummy:
+
+			self.te_mod_alpha = TemporalEncoding(self.te_features, self.max_te_period)
+			#self.te_mod_beta = TemporalEncoding(self.te_features, self.max_te_period)
+			print('te_mod_alpha:',self.te_mod_alpha)
+
+			fourier_dims = int(self.input_dims*0.5)
+
+			#self.gamma_f = Linear(self.te_features, fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
+			#self.beta_f = Linear(self.te_features, fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
+			self.gamma_beta_f = Linear(self.te_features, fourier_dims, split_out=2, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
+
+			#self.gamma_w = nn.Parameter(torch.ones((self.mod_output_dims, self.mod_input_dims)), requires_grad=False)
+			#self.gamma_f = nn.Linear(self.mod_input_dims, self.mod_output_dims, bias=False)
+			
+			self.x_proj = Linear(self.input_dims, fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
+			#self.x_proj2 = Linear(fourier_dims*2, fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
+			self.z_proj = Linear(fourier_dims, self.input_dims, **linear_kwargs)
+			#self.x_proj_m = Linear(self.mod_output_dims, self.mod_output_dims, **linear_kwargs)
+			
+
+			#self.gamma_beta_mlp = MLP(self.mod_input_dims, self.mod_output_dims*2, [self.mod_input_dims], activation='relu')
+
+			#self.bn_fourier = MaskedBatchNorm1d(fourier_dims, affine=False)# if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
+			#self.bn = MaskedBatchNorm1d(self.input_dims)# if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
+
+			self.in_dropout_f = nn.Dropout(self.in_dropout)
+			self.mod_dropout_f = nn.Dropout(self.mod_dropout)
+			self.out_dropout_f = nn.Dropout(self.out_dropout)
+
+	def get_info(self):
+		assert not self.training, 'you can not access this method in trining mode'
+		d = {
+			'weight':tensor_to_numpy(self.gamma_beta_f.linear.weight),
+			}
+		d.update(self.te_mod_alpha.get_info())
+		return d
+
+	def mod_x(self, x, te_alpha, onehot):
+		#gamma = self.gamma_f(torch.cat([x,mod], dim=-1))
+		#gamma = self.gamma_f(te_alpha)
+		#beta = self.beta_f(te_beta)
+		gamma, beta = self.gamma_beta_f(te_alpha)
+
+		#x = self.x_proj(torch.cat([x,mod], dim=-1))
+		#print('gamma',gamma)
+		#print('beta',beta)
+		#x = self.bn(x, onehot) # bug?
+		#x = x+beta
+		#m = self.x_proj_m(x)#torch.sigmoid(m)*
+		
+		#mod_x = torch.cat([self.x_proj(x), gamma], dim=-1)
+		#mod_x = self.z_proj(torch.sigmoid(self.x_proj(mod_x))*beta)
+
+		#mod_x =x*gamma+beta
+		#print('gamma',gamma,gamma.shape)
+		#mod_x = self.bn_fourier(self.x_proj(x), onehot)*gamma+beta
+		mod_x = self.x_proj(x)*gamma+beta
+		#mod_x = self.bn(mod_x, onehot) # bug?
+		mod_x = self.z_proj(mod_x)
+		#w = self.x_proj(x)
+		#k = 1.
+		#x = (1+k*torch.tanh(w))*gamma # gamma=carriers
+		#x = gamma*x+beta
+		#x = torch.sigmoid(gamma)*x+beta # best?
+		return mod_x
+
+	def forward(self, x, time, onehot, **kwargs):
+		# x (b,t,fx)
+		# time (b,t)
+		assert x.shape[-1]==self.input_dims
+
+		if not self.is_dummy:
+			x = self.in_dropout_f(x)
+			te_alpha = self.te_mod_alpha(time)
+			#te_beta = self.te_mod_beta(time)
+			
+			#x = self.mod_x(x, te_alpha, te_beta)
+
+			#x = self.mod_x(x, te_alpha, onehot)
+			#x = self.bn(x, onehot) # PRE NORM
+			sub_x = self.mod_x(x, te_alpha, onehot)
+			x = sub_x+self.out_dropout_f(x) # RES
+			#x = self.bn(x, onehot) # POST NORM
+
+		return x
+
+	def __len__(self):
+		return utils.count_parameters(self)
+		
+	def extra_repr(self):
+		txt = strings.get_string_from_dict({
+		'input_dims':self.input_dims,
+		'in_dropout':self.in_dropout,
+		'out_dropout':self.out_dropout,
+		'mod_dropout':self.mod_dropout,
+		#'bias':self.bias,
+		}, ', ', '=')
+		return txt
+
+	def __repr__(self):
+		txt = f'TimeFILM({self.extra_repr()})'
+		txt += f'({len(self):,}[p])'
+		return txt
 
 '''
 class SetFunction(nn.Module):

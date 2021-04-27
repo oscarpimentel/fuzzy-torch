@@ -15,7 +15,7 @@ from flamingchoripan import lists as lists
 from .pytorch_multihead_clone import MultiheadAttention
 #from torch.nn import MultiheadAttention
 from .batch_norms import LayerNorm, MaskedBatchNorm1d
-from ..others import FILM, TemporalEncoding
+from ..others import TimeFILM
 from .. import seq_utils as seq_utils
 import numpy as np
 
@@ -35,6 +35,7 @@ class SelfAttn(nn.Module):
 		uses_length_wise_batchnorm=True,
 		mlp_k=2, # ajusted to fit rnn parameters
 		bypass_mlp=False,
+		norm_mode=None, # fixme
 		**kwargs):
 		super().__init__()
 		### CHECKS
@@ -58,6 +59,7 @@ class SelfAttn(nn.Module):
 		self.uses_length_wise_batchnorm = uses_length_wise_batchnorm
 		self.mlp_k = mlp_k
 		self.bypass_mlp = bypass_mlp
+		self.norm_mode = norm_mode
 		self.reset()
 
 	def reset(self):
@@ -123,6 +125,7 @@ class SelfAttn(nn.Module):
 		'bias':self.bias,
 		'mlp_k':self.mlp_k,
 		'bypass_mlp':self.bypass_mlp,
+		'norm_mode':self.norm_mode,
 		}, ', ', '=')
 		return txt
 
@@ -151,6 +154,7 @@ class SelfAttn(nn.Module):
 		new_onehot = onehot.clone()
 		new_onehot[:,0] = True # forced to avoid errors of empty bands sequences
 		x = self.in_dropout_f(x)
+		sub_x = self.attn_bn(x, onehot) if self.norm_mode=='pre' else x # PRE NORM
 
 		### ATTN
 		attn_kwargs = {
@@ -159,29 +163,26 @@ class SelfAttn(nn.Module):
 			'mul_attn_mask':mul_attn_mask,
 			'need_weights':True,
 			}
-		queries = x.permute(1,0,2)
-		keys = x.permute(1,0,2)
-		values = x.permute(1,0,2)
-		contexts, scores = self.mh_attn(queries, keys, values, **attn_kwargs)
+		queries = sub_x.permute(1,0,2)
+		keys = sub_x.permute(1,0,2)
+		values = sub_x.permute(1,0,2)
+		sub_x, scores = self.mh_attn(queries, keys, values, **attn_kwargs)
 		scores = scores.detach()
-		#assert 0
-		
-		#scores = scores.cpu()
-		#print(scores.device)
-		#assert torch.all(scores.sum(dim=-1)>=0.99999)
-		x = contexts+self.res1_dropout_f(values) # res
-		x = x.permute(1,0,2)
-		x = self.attn_bn(x, onehot)
 
-		### ATTN-MLP
+		x = sub_x+self.res1_dropout_f(values) # RES
+		x = x.permute(1,0,2)
+		x = self.attn_bn(x, onehot) if self.norm_mode=='post' else x # POST NORM
+
+		### MLP
 		if not self.bypass_mlp:
-			x = self.mlp(x)+self.res2_dropout_f(x) # res
-			x = self.mlp_bn(x, onehot)
+			sub_x = self.mlp_bn(x, onehot) if self.norm_mode=='pre' else x # PRE NORM
+			sub_x = self.mlp(sub_x)
+			x = sub_x+self.res2_dropout_f(x) # RES
+			x = self.mlp_bn(x, onehot) if self.norm_mode=='post' else x # POST NORM
 
 		### ACTIVATION
 		x = self.activation_f(x, dim=-1)
 		x = self.out_dropout_f(x)
-		#print(scores.shape)
 		
 		if return_only_actual_scores:
 			b,h,t,qt = scores.size()
@@ -365,7 +366,7 @@ class MLTimeSelfAttn(nn.Module):
 		in_dropout=0.0,
 		dropout=0.0,
 		out_dropout=0.0,
-		attn_dropout=0.0,
+		attn_dropout=0.05,
 		bias=True,
 		uses_length_wise_batchnorm=1,
 		scale_mode='softmax',
@@ -400,21 +401,16 @@ class MLTimeSelfAttn(nn.Module):
 			activations[-1] = self.last_activation
 
 		### MODULES
-		self.te_mods = nn.ModuleList()
-		self.self_attns = nn.ModuleList()
 		self.te_films = nn.ModuleList()
+		self.self_attns = nn.ModuleList()
 		for k in range(len(self.embd_dims_list)-1):
 			input_dims_ = self.embd_dims_list[k]
 			output_dims_ = self.embd_dims_list[k+1]
 			
-			te_mod = TemporalEncoding(self.te_features, self.max_te_period, scale_mode=self.scale_mode)
-			print('te_mod:',te_mod)
-			self.te_mods += [te_mod]
-
 			film_kwargs = {
 				#'in_dropout':self.dropout,
 				}
-			film = FILM(te_mod.get_output_dims(), input_dims_, **film_kwargs)
+			film = TimeFILM(input_dims_, self.te_features, self.max_te_period, **film_kwargs)
 			print('film:',film)
 			self.te_films += [film]
 
@@ -454,7 +450,7 @@ class MLTimeSelfAttn(nn.Module):
 
 	def get_info(self):
 		d = {
-			'te_mod':[te_mod.get_info() for te_mod in self.te_mods],
+			'te_film':[te_film.get_info() for te_film in self.te_films],
 			}
 		return d
 
@@ -482,9 +478,8 @@ class MLTimeSelfAttn(nn.Module):
 
 		outs = []
 		scores = []
-		for k,(te_film,self_attn,te_mod) in enumerate(zip(self.te_films, self.self_attns, self.te_mods)):
-			te = te_mod(time)
-			x = te_film(x, te, onehot)
+		for k,(te_film,self_attn) in enumerate(zip(self.te_films, self.self_attns)):
+			x = te_film(x, time, onehot)
 			x, _scores = self_attn(x, onehot,
 				mul_attn_mask,
 				return_only_actual_scores,
