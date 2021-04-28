@@ -302,7 +302,7 @@ class TimeFILM(nn.Module):
 			#self.te_mod_beta = TemporalEncoding(self.te_features, self.max_te_period)
 			print('te_mod_alpha:',self.te_mod_alpha)
 
-			fourier_dims = int(self.input_dims*0.5)
+			fourier_dims = int(self.input_dims*.5)
 
 			#self.gamma_f = Linear(self.te_features, fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
 			#self.beta_f = Linear(self.te_features, fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
@@ -313,7 +313,7 @@ class TimeFILM(nn.Module):
 			
 			self.x_proj = Linear(self.input_dims, fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
 			#self.x_proj2 = Linear(fourier_dims*2, fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
-			self.z_proj = Linear(fourier_dims, self.input_dims, **linear_kwargs)
+			self.z_proj = Linear(fourier_dims, self.input_dims, bias=False, **linear_kwargs)
 			#self.x_proj_m = Linear(self.mod_output_dims, self.mod_output_dims, **linear_kwargs)
 			
 

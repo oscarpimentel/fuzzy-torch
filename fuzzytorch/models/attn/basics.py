@@ -366,7 +366,7 @@ class MLTimeSelfAttn(nn.Module):
 		in_dropout=0.0,
 		dropout=0.0,
 		out_dropout=0.0,
-		attn_dropout=0.05,
+		attn_dropout=10/100,
 		bias=True,
 		uses_length_wise_batchnorm=1,
 		scale_mode='softmax',
@@ -424,7 +424,7 @@ class MLTimeSelfAttn(nn.Module):
 				'bias':self.bias,
 				'uses_length_wise_batchnorm':self.uses_length_wise_batchnorm,
 				'mlp_k':0.5,
-				'bypass_mlp':0,
+				'bypass_mlp':1,
 				}
 			self_attn = TimeSelfAttn(input_dims_, output_dims_, **attn_kwargs)
 			self.self_attns += [self_attn]
