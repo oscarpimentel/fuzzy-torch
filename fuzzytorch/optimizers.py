@@ -10,7 +10,7 @@ import torch
 
 class LossOptimizer:
 	def __init__(self, to_optimize_model, opt_class, opt_kwargs_f,
-		clip_grad:float=1.,
+		clip_grad=None,
 		model_get_parameters_f=None,
 		**kwargs):
 		self.to_optimize_model = to_optimize_model

@@ -366,7 +366,7 @@ class MLTimeSelfAttn(nn.Module):
 		in_dropout=0.0,
 		dropout=0.0,
 		out_dropout=0.0,
-		attn_dropout=10/100,
+		attn_dropout=1/100,
 		bias=True,
 		uses_length_wise_batchnorm=1,
 		scale_mode='softmax',

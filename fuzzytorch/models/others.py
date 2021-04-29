@@ -93,7 +93,7 @@ class TemporalEncoding(nn.Module):
 		requires_grad=False, # False True
 		random_init=False, # True False
 		scale_mode=None, # None sigmoid hardsigmoid softmax
-		time_noise=1/24, # regularization
+		time_noise=0/24, # regularization
 		**kwargs):
 		super().__init__()
 
@@ -138,9 +138,10 @@ class TemporalEncoding(nn.Module):
 
 	def generate_initial_tensors(self):
 		if self.min_te_period is None:
-			l = self.get_output_dims()//2
-			periods = np.repeat(np.array([self.max_te_period]*l/2**np.arange(l)), 2, axis=0).astype(np.float32)
-			phases = np.array([math.pi/2 if i%2==0 else 0 for i in range(0, 2*l)]).astype(np.float32)
+			n = self.get_output_dims()//2
+			#periods = np.repeat(np.array([self.max_te_period/2**i for i in np.arange(n)]), 2, axis=0).astype(np.float32) # juxta
+			periods = np.repeat(np.array([self.max_te_period/(i+1) for i in np.arange(n)]), 2, axis=0).astype(np.float32) # fourier
+			phases = np.array([math.pi/2 if i%2==0 else 0 for i in range(0, 2*n)]).astype(np.float32)
 		else:
 			periods = np.linspace(self.max_te_period, self.min_te_period, self.get_output_dims()).astype(np.float32)
 			phases = np.zeros_like(periods).astype(np.float32)
@@ -302,24 +303,20 @@ class TimeFILM(nn.Module):
 			#self.te_mod_beta = TemporalEncoding(self.te_features, self.max_te_period)
 			print('te_mod_alpha:',self.te_mod_alpha)
 
-			fourier_dims = int(self.input_dims*.5)
+			self.fourier_dims = int(self.input_dims*0.5)
 
-			#self.gamma_f = Linear(self.te_features, fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
-			#self.beta_f = Linear(self.te_features, fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
-			self.gamma_beta_f = Linear(self.te_features, fourier_dims, split_out=2, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
+			#self.gamma_f = Linear(self.te_features, self.fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
+			#self.beta_f = Linear(self.te_features, self.fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
+			self.gamma_beta_f = Linear(self.te_features, self.fourier_dims, split_out=2, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
 
 			#self.gamma_w = nn.Parameter(torch.ones((self.mod_output_dims, self.mod_input_dims)), requires_grad=False)
 			#self.gamma_f = nn.Linear(self.mod_input_dims, self.mod_output_dims, bias=False)
 			
-			self.x_proj = Linear(self.input_dims, fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
-			#self.x_proj2 = Linear(fourier_dims*2, fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
-			self.z_proj = Linear(fourier_dims, self.input_dims, bias=False, **linear_kwargs)
-			#self.x_proj_m = Linear(self.mod_output_dims, self.mod_output_dims, **linear_kwargs)
-			
+			self.x_proj = Linear(self.input_dims, self.fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
+			self.z_proj = Linear(self.fourier_dims, self.input_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
 
 			#self.gamma_beta_mlp = MLP(self.mod_input_dims, self.mod_output_dims*2, [self.mod_input_dims], activation='relu')
-
-			#self.bn_fourier = MaskedBatchNorm1d(fourier_dims, affine=False)# if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
+			#self.bn_fourier = MaskedBatchNorm1d(self.fourier_dims, affine=False)# if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
 			#self.bn = MaskedBatchNorm1d(self.input_dims)# if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
 
 			self.in_dropout_f = nn.Dropout(self.in_dropout)
@@ -339,28 +336,9 @@ class TimeFILM(nn.Module):
 		#gamma = self.gamma_f(te_alpha)
 		#beta = self.beta_f(te_beta)
 		gamma, beta = self.gamma_beta_f(te_alpha)
-
-		#x = self.x_proj(torch.cat([x,mod], dim=-1))
-		#print('gamma',gamma)
-		#print('beta',beta)
-		#x = self.bn(x, onehot) # bug?
-		#x = x+beta
-		#m = self.x_proj_m(x)#torch.sigmoid(m)*
-		
-		#mod_x = torch.cat([self.x_proj(x), gamma], dim=-1)
-		#mod_x = self.z_proj(torch.sigmoid(self.x_proj(mod_x))*beta)
-
-		#mod_x =x*gamma+beta
-		#print('gamma',gamma,gamma.shape)
-		#mod_x = self.bn_fourier(self.x_proj(x), onehot)*gamma+beta
-		mod_x = self.x_proj(x)*gamma+beta
-		#mod_x = self.bn(mod_x, onehot) # bug?
-		mod_x = self.z_proj(mod_x)
-		#w = self.x_proj(x)
-		#k = 1.
-		#x = (1+k*torch.tanh(w))*gamma # gamma=carriers
-		#x = gamma*x+beta
-		#x = torch.sigmoid(gamma)*x+beta # best?
+		#mod_x = self.x_proj(x)*gamma+beta
+		#mod_x = x*gamma+beta
+		mod_x = self.z_proj(self.x_proj(x)*gamma+beta)
 		return mod_x
 
 	def forward(self, x, time, onehot, **kwargs):
@@ -378,6 +356,7 @@ class TimeFILM(nn.Module):
 			#x = self.mod_x(x, te_alpha, onehot)
 			#x = self.bn(x, onehot) # PRE NORM
 			sub_x = self.mod_x(x, te_alpha, onehot)
+			#x = sub_x
 			x = sub_x+self.out_dropout_f(x) # RES
 			#x = self.bn(x, onehot) # POST NORM
 
@@ -392,6 +371,7 @@ class TimeFILM(nn.Module):
 		'in_dropout':self.in_dropout,
 		'out_dropout':self.out_dropout,
 		'mod_dropout':self.mod_dropout,
+		'fourier_dims':self.fourier_dims,
 		#'bias':self.bias,
 		}, ', ', '=')
 		return txt
