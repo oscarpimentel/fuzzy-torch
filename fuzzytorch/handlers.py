@@ -334,6 +334,7 @@ class ModelTrainHandler(object):
 		filedirs = files.get_filedirs(self.complete_save_roodir, fext=C_.SAVE_FEXT)
 		if len(filedirs)==0:
 			prints.print_red(f'*** no files in {self.complete_save_roodir} ***')
+			raise Exception(f'*** no files in {self.complete_save_roodir} ***')
 			return False
 
 		if target_epoch is None: # seach the last epoch with that id
@@ -341,6 +342,7 @@ class ModelTrainHandler(object):
 			epochs = [int(filedic['epoch']) for filedic in filedics if int(filedic['id'])==target_id]
 			if len(epochs)==0:
 				prints.print_red(f'*** no files with id {target_id} in {self.complete_save_roodir} ***')
+				raise Exception(f'*** no files with id {target_id} in {self.complete_save_roodir} ***')
 				return False
 
 			epochs = sorted(epochs)
