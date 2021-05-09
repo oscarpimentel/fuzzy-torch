@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F 
 from ..utils import tensor_to_numpy
 from .basics import Linear, MLP
+#from cnn.basics import ConvLinear
 from . import utils as utils
 import flamingchoripan.strings as strings
 import numpy as np
@@ -313,7 +314,12 @@ class TimeFILM(nn.Module):
 			#self.gamma_f = nn.Linear(self.mod_input_dims, self.mod_output_dims, bias=False)
 			
 			self.x_proj = Linear(self.input_dims, self.fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
-			self.z_proj = Linear(self.fourier_dims, self.input_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
+			
+			kernel_size = 3
+			self.cnn_pad = nn.ConstantPad1d([kernel_size-1,0], 0)
+			self.cnn = nn.Conv1d(self.fourier_dims, self.input_dims, kernel_size=kernel_size, padding=0, bias=False)
+			#self.z_proj = Linear(self.fourier_dims, self.input_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
+			#print('z_proj',self.z_proj)
 
 			#self.gamma_beta_mlp = MLP(self.mod_input_dims, self.mod_output_dims*2, [self.mod_input_dims], activation='relu')
 			#self.bn_fourier = MaskedBatchNorm1d(self.fourier_dims, affine=False)# if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
@@ -339,7 +345,17 @@ class TimeFILM(nn.Module):
 		#mod_x = self.x_proj(x)*gamma+beta
 		#mod_x = x*gamma+beta
 		gamma = _gamma+1
-		mod_x = self.z_proj(self.x_proj(x)*gamma+beta)
+		mod_x = self.x_proj(x)*gamma+beta
+		#mod_x = self.z_proj(mod_x)
+		mod_x = mod_x.permute(0,2,1)
+		#print(mod_x[0,0,:])
+		mod_x = self.cnn_pad(mod_x)
+		#print(mod_x[0,0,:])
+		#assert 0
+		#print('pre-cnn',x.shape);print('pre-cnn',x[0,0,:]);print()
+		mod_x = self.cnn(mod_x)
+		mod_x = mod_x.permute(0,2,1)
+
 		return mod_x
 
 	def forward(self, x, time, onehot, **kwargs):
