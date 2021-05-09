@@ -93,14 +93,14 @@ class TemporalEncoding(nn.Module):
 		requires_grad=False, # False True
 		random_init=False, # True False
 		scale_mode=None, # None sigmoid hardsigmoid softmax
-		time_noise=0/24, # regularization
+		time_noise=1/24, # regularization in time units: 0 None
 		**kwargs):
 		super().__init__()
 
 		### CHECKS
 		assert te_features>0
 		assert te_features%2==0
-		assert time_noise>=0
+		assert time_noise is None or time_noise>=0
 
 		self.te_features = te_features
 		self.max_te_period = max_te_period
@@ -111,7 +111,7 @@ class TemporalEncoding(nn.Module):
 		self.requires_grad = requires_grad
 		self.random_init = random_init
 		self.scale_mode = scale_mode
-		self.time_noise = time_noise
+		self.time_noise = self.max_te_period*1e-4 if time_noise is None else time_noise
 		self.reset()
 
 	def reset(self):
@@ -244,7 +244,7 @@ class TemporalEncoding(nn.Module):
 		if self.training and self.time_noise>0:
 			#print(time, time.device)
 			uniform_noise = torch.rand(size=time.shape, device=time.device)
-			uniform_noise = self.time_noise*2*(uniform_noise-0.5)
+			uniform_noise = self.time_noise*(uniform_noise-0.5)
 			#print(uniform_noise)
 			time = time+uniform_noise
 			#print("2",time)
@@ -335,9 +335,10 @@ class TimeFILM(nn.Module):
 		#gamma = self.gamma_f(torch.cat([x,mod], dim=-1))
 		#gamma = self.gamma_f(te_alpha)
 		#beta = self.beta_f(te_beta)
-		gamma, beta = self.gamma_beta_f(te_alpha)
+		_gamma, beta = self.gamma_beta_f(te_alpha)
 		#mod_x = self.x_proj(x)*gamma+beta
 		#mod_x = x*gamma+beta
+		gamma = _gamma+1
 		mod_x = self.z_proj(self.x_proj(x)*gamma+beta)
 		return mod_x
 
