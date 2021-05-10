@@ -22,6 +22,9 @@ class MetricResult():
 		elif self.reduction_mode=='sum':
 			self.batch_metric = self.batch_metric_.sum()[None]
 
+	def to(self, device):
+		pass
+		
 	def get_metric(self,
 		get_tensor=False,
 		):

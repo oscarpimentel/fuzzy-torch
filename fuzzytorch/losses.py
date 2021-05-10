@@ -63,6 +63,9 @@ class LossResult():
 		if self.reduction_mode=='mean':
 			self.batch_loss = self.batch_loss_.mean()[None]
 
+	def to(self, device):
+		pass
+
 	def add_subloss(self, name, batch_subloss):
 		assert len(batch_subloss.shape)==1
 		self.batch_sublosses[name] = batch_subloss.detach().mean()[None]
