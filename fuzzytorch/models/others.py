@@ -323,7 +323,6 @@ class TimeFILM(nn.Module):
 			self.cnn_pad = nn.ConstantPad1d([kernel_size-1, 0], 0)
 			self.cnn = nn.Conv1d(self.fourier_dims, self.input_dims, kernel_size=kernel_size, padding=0, bias=True)
 
-
 			#self.gamma_beta_mlp = MLP(self.mod_input_dims, self.mod_output_dims*2, [self.mod_input_dims], activation='relu')
 			#self.bn_fourier = MaskedBatchNorm1d(self.fourier_dims, affine=False)# if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
 			#self.bn = MaskedBatchNorm1d(self.input_dims)# if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
