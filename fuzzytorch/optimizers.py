@@ -55,7 +55,10 @@ class LossOptimizer:
 		self.optimizer.zero_grad()
 
 	def none_grad(self):
-		self.optimizer.zero_grad(set_to_none=True)
+		self.optimizer.zero_grad()
+		#self.optimizer.zero_grad(set_to_none=True) # bug??
+		#for param in model.parameters():
+		#	param.grad = None
 
 	def apply_clip_grad(self):
 		if not self.clip_grad is None:
