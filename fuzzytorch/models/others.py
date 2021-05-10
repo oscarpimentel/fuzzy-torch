@@ -315,8 +315,8 @@ class TimeFILM(nn.Module):
 			
 			self.x_proj = Linear(self.input_dims, self.fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
 			
-			self.z_proj = Linear(self.fourier_dims, self.input_dims, bias=True, **linear_kwargs)
-			print('z_proj',self.z_proj)
+			#self.z_proj = Linear(self.fourier_dims, self.input_dims, bias=True, **linear_kwargs)
+			#print('z_proj',self.z_proj)
 
 			### BUG when using conv???
 			kernel_size = 2
