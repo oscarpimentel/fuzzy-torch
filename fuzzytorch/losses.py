@@ -77,14 +77,22 @@ class LossResult():
 		assert len(self.batch_loss)==1
 		if torch.any(torch.isnan(self.batch_loss)) or torch.any(~torch.isfinite(self.batch_loss)):
 			raise ex.NanLossError()
-		return self.batch_loss.detach().item() if not get_tensor else self.batch_loss
+		if not get_tensor:
+			return self.batch_loss.detach().item()
+			#return self.batch_loss.data[0]
+		else:
+			return self.batch_loss
 
 	def get_subloss(self, name,
 		get_tensor=False,
 		):
 		assert len(self.batch_sublosses[name].shape)==1
 		assert len(self.batch_sublosses[name])==1
-		return self.batch_sublosses[name].detach().item() if not get_tensor else self.batch_sublosses[name]
+		if not get_tensor:
+			return self.batch_sublosses[name].detach().item()
+			#return self.batch_sublosses[name].data[0]
+		else:
+			return self.batch_sublosses[name]
 
 	def get_sublosses_names(self):
 		return list(self.batch_sublosses.keys())
@@ -121,11 +129,15 @@ class LossResult():
 			self.batch_sublosses[sl_name] = self.batch_sublosses[sl_name]/other
 		return self
 
-	def get_info_df(self):
+	def get_info(self):
 		sublosses_names = self.get_sublosses_names()
-		values = [len(self), self.get_loss()]+[self.get_subloss(name) for name in sublosses_names]
-		df = pd.DataFrame([values], columns=['_len', '_loss']+sublosses_names)
-		return df
+		d = {
+			'_len':len(self),
+			'_loss':self.get_loss(),
+			}
+		for name in sublosses_names:
+			d[name] = self.get_subloss(name)
+		return d
 
 ###################################################################################################################################################
 

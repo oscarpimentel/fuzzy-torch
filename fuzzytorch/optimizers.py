@@ -93,8 +93,7 @@ class LossOptimizer:
 	def get_kwarg_value(self, key):
 		return self.optimizer.param_groups[0][key]
 
-	def get_info_df(self):
+	def get_info(self):
 		opt_kwargs = self.get_opt_kwargs()
-		values = [self.get_kwarg_value(opt_kwarg) for opt_kwarg in opt_kwargs]
-		df = pd.DataFrame([values], columns=opt_kwargs)
-		return df
+		d = {opt_kwarg:self.get_kwarg_value(opt_kwarg) for opt_kwarg in opt_kwargs}
+		return d

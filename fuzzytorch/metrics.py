@@ -30,7 +30,11 @@ class MetricResult():
 		):
 		assert len(self.batch_metric.shape)==1
 		assert len(self.batch_metric)==1
-		return self.batch_metric.detach().item() if not get_tensor else self.batch_metric
+		if not get_tensor:
+			return self.batch_metric.detach().item()
+			#return self.batch_metric.data[0]
+		else:
+			self.batch_metric
 
 	def __len__(self):
 		return self.len_
@@ -54,9 +58,11 @@ class MetricResult():
 		self.batch_metric = self.batch_metric/other
 		return self
 
-	def get_info_df(self):
-		df = pd.DataFrame([self.get_metric()], columns=['_metric'])
-		return df
+	def get_info(self):
+		d = {
+			'_metric':self.get_metric(),
+			}
+		return d
 
 ###################################################################################################################################################
 

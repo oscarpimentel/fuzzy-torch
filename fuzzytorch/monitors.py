@@ -13,13 +13,7 @@ import flamingchoripan.files as files
 from flamingchoripan.counters import Counter
 from flamingchoripan.datascience.xerror import XError
 import pandas as pd
-
-###################################################################################################################################################
-
-def get_formated_df(df, index, index_name):
-	df.index = [index]
-	df.index.rename(index_name, inplace=True)
-	return df
+from flamingchoripan.dataframes import DFBuilder
 
 ###################################################################################################################################################
 
@@ -54,10 +48,10 @@ class LossMonitor(object):
 
 	def reset(self):
 		self.best_value = None
-		self.loss_df = None
-		self.opt_df = None
-		self.loss_df_epoch = None
-		self.metrics_df_epoch = None
+		self.loss_df = DFBuilder()
+		self.opt_df = DFBuilder()
+		self.loss_df_epoch = DFBuilder()
+		self.metrics_df_epoch = DFBuilder()
 		self.counter_k.reset()
 		self.counter_epoch.reset()
 
@@ -95,16 +89,22 @@ class LossMonitor(object):
 		):
 		if self.counter_k.check('k'):
 			assert isinstance(loss, ft_losses.LossResult)
-			new_df = loss.get_info_df()
-			new_df = pd.concat([pd.DataFrame([[dt]], columns=['_dt']), new_df], axis=1)
-			new_df = get_formated_df(new_df, self.counter_k.get_global_count(), 'k')
-			self.loss_df = new_df if not hasattr(self, 'loss_df') else pd.concat([self.loss_df, new_df])
+			d = loss.get_info()
+			#index = self.counter_k.get_global_count()
+			index = None
+			d.update({
+				'_dt':dt,
+				})
+			self.loss_df.append(index, d)
 
 	def add_opt_history_epoch(self):
-		new_df = self.optimizer.get_info_df()
-		new_df = pd.concat([pd.DataFrame([[self.counter_k.get_global_count()]], columns=['_k']), new_df], axis=1)
-		new_df = get_formated_df(new_df, self.counter_epoch.get_global_count(), 'epoch')
-		self.opt_df = new_df if not hasattr(self, 'opt_df') else pd.concat([self.opt_df, new_df])
+		d = self.optimizer.get_info()
+		#index = self.counter_epoch.get_global_count()
+		index = None
+		d.update({
+			'_k':self.counter_k.get_global_count(),
+			})
+		self.opt_df.append(index, d)
 
 	def add_loss_history_epoch(self, loss,
 		dt=0,
@@ -112,31 +112,34 @@ class LossMonitor(object):
 		):
 		if self.counter_epoch.check('val_epoch'):
 			assert isinstance(loss, ft_losses.LossResult)
-			new_df = loss.get_info_df()
-			c = ['_dt'] if set_name is None else ['_dt', '_set']
-			v = [dt] if set_name is None else [dt, set_name]
-			new_df = pd.concat([pd.DataFrame([v], columns=c), new_df], axis=1)
-			new_df = get_formated_df(new_df, self.counter_epoch.get_global_count(), 'val_epoch')
-			self.loss_df_epoch = new_df if not hasattr(self, 'loss_df_epoch') else pd.concat([self.loss_df_epoch, new_df])
+			d = loss.get_info()
+			#index = self.counter_epoch.get_global_count()
+			index = None
+			d.update({
+				'_dt':dt,
+				'_set':set_name,
+				})
+			self.loss_df_epoch.append(index, d)
 
 	def add_metric_history_epoch(self, metrics_dict,
 		dt=0,
 		set_name=None,
 		):
 		if self.counter_epoch.check('val_epoch'):
-			new_dfs = []
+			d = {}
 			for mn in metrics_dict.keys():
 				metric = metrics_dict[mn]
 				assert isinstance(metric, ft_metrics.MetricResult)
-				df = metric.get_info_df()
-				df.rename(columns={'_metric':mn}, inplace=True)
-				new_dfs.append(df)
+				d[mn] = metric.get_info()['_metric']
+			d.update({
+				'_dt':dt,
+				'_set':set_name,
+				})
+			#index = f'{self.counter_epoch.get_global_count()}.set_name'
+			index = None
+			self.metrics_df_epoch.append(index, d)
 
-			c = ['_dt'] if set_name is None else ['_dt', '_set']
-			v = [dt] if set_name is None else [dt, set_name]
-			new_df = pd.concat([pd.DataFrame([v], columns=c)]+new_dfs, axis=1)
-			new_df = get_formated_df(new_df, self.counter_epoch.get_global_count(), 'val_epoch')
-			self.metrics_df_epoch = new_df if not hasattr(self, 'metrics_df_epoch') else pd.concat([self.metrics_df_epoch, new_df])
+		#print(self.metrics_df_epoch.get_df())
 
 	def get_metric_names(self):
 		return [m.name for m in self.metrics]
@@ -177,19 +180,24 @@ class LossMonitor(object):
 		self.best_epoch = best_epoch
 
 	def get_time_per_iteration(self):
-		try:
-			return XError(self.loss_df['_dt'].values)
-		except:
-			return XError([])
+		loss_df = self.loss_df.get_df()
+		return XError([v for v in loss_df['_dt'].values])
+		#try:
+		#	return XError(loss_df['_dt'].values)
+		#except:
+		#	return XError([])
 
 	def get_evaluation_set_names(self):
-		try:
-			return list(np.unique(self.loss_df_epoch['_set'].values))
-		except:
-			return None
+		loss_df_epoch = self.loss_df_epoch.get_df()
+		return list(np.unique(loss_df_epoch['_set'].values))
+		#try:
+		#	return list(np.unique(self.loss_df_epoch['_set'].values))
+		#except:
+		#	return None
 
 	def get_time_per_epoch_set(self, set_name):
-		return XError(self.loss_df_epoch['_dt'][self.loss_df_epoch['_set'].isin([set_name])].values)
+		loss_df_epoch = self.loss_df_epoch.get_df()
+		return XError(loss_df_epoch['_dt'][loss_df_epoch['_set'].isin([set_name])].values)
 
 	def get_time_per_epoch(self):
 		evaluation_set_names = self.get_evaluation_set_names()
@@ -203,8 +211,10 @@ class LossMonitor(object):
 		if evaluation_set_names is None:
 			return np.nan
 		else:
-			t = self.loss_df['_dt'].values.sum()
-			t += sum([self.loss_df_epoch['_dt'][self.loss_df_epoch['_set'].isin([set_name])].values.sum() for set_name in evaluation_set_names])
+			loss_df = self.loss_df.get_df()
+			loss_df_epoch = self.loss_df_epoch.get_df()
+			t = loss_df['_dt'].values.sum()
+			t += sum([loss_df_epoch['_dt'][loss_df_epoch['_set'].isin([set_name])].values.sum() for set_name in evaluation_set_names])
 			return t
 
 	### file methods
@@ -223,7 +233,8 @@ class LossMonitor(object):
 			return True
 
 		elif self.save_mode==C_.SM_ONLY_INF_LOSS:
-			loss_evolution = self.loss_df_epoch['_loss'][self.loss_df_epoch['_set'].isin([set_name])].values
+			loss_df_epoch = self.loss_df_epoch.get_df()
+			loss_evolution = loss_df_epoch['_loss'][loss_df_epoch['_set'].isin([set_name])].values
 			if len(loss_evolution)<=1:
 				return True # always save first and dont delete anything
 
@@ -238,7 +249,9 @@ class LossMonitor(object):
 				return False
 
 		elif self.save_mode==C_.SM_ONLY_INF_METRIC:
-			metric_evolution = self.metrics_df_epoch[self.target_metric_crit][self.metrics_df_epoch['_set'].isin([set_name])].values
+			metrics_df_epoch = self.metrics_df_epoch.get_df()
+			metric_evolution = metrics_df_epoch[self.target_metric_crit][metrics_df_epoch['_set'].isin([set_name])].values
+			#print(metrics_df_epoch, metric_evolution)
 			if len(metric_evolution)<=1:
 				return True # always save first and dont delete anything
 
@@ -253,7 +266,8 @@ class LossMonitor(object):
 				return False
 
 		elif self.save_mode==C_.SM_ONLY_SUP_METRIC:
-			metric_evolution = self.metrics_df_epoch[self.target_metric_crit][self.metrics_df_epoch['_set'].isin([set_name])].values
+			metrics_df_epoch = self.metrics_df_epoch.get_df()
+			metric_evolution = metrics_df_epoch[self.target_metric_crit][metrics_df_epoch['_set'].isin([set_name])].values
 			if len(metric_evolution)<=1:
 				return True # always save first and dont delete anything
 

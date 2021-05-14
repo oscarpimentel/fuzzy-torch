@@ -239,10 +239,11 @@ class ModelTrainHandler(object):
 							loss.get_loss(get_tensor=True).backward() # gradient calculation
 							lmonitor.optimizer.step() # step gradient
 
-							### save loss to history & bar text
-							lmonitor.add_loss_history_k(loss, lmonitor_cr.dt())
-							losses_text_list.append(f'[{lmonitor.name}] b={len(loss):,} - _loss={str(loss)} {lmonitor_cr}')
-							lmonitor.k_update() # update k
+							with torch.no_grad():
+								### save loss to history & bar text
+								lmonitor.add_loss_history_k(loss, lmonitor_cr.dt())
+								losses_text_list.append(f'[{lmonitor.name}] b={len(loss):,} - _loss={str(loss)} {lmonitor_cr}')
+								lmonitor.k_update() # update k
 
 						if ki>0:
 							#break # debug
