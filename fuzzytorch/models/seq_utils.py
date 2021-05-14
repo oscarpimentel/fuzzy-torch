@@ -90,7 +90,7 @@ def seq_max_pooling(x, onehot):
 	b,t,f = x.size()
 	new_onehot = onehot.clone()
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
-	infty = 1/C_.EPS
+	infty = 1/C_.EPS # problematic as in mcmc?
 	x = x.masked_fill(~new_onehot[...,None], -infty) # clean using onehot
 	x,_ = torch.max(x, dim=1)
 	return x
@@ -114,7 +114,7 @@ def seq_min_max_norm(x, onehot):
 	onehot (b,t)
 	'''
 	_check(x, onehot)
-
+	#b,t,f = x.size()
 	min_ = seq_min_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
 	max_ = seq_max_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
 	#print(min_, max_)
