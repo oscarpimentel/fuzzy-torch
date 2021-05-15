@@ -12,88 +12,132 @@ def _check(x, onehot):
 	assert len(onehot.shape)==2
 	assert x.shape[:-1]==onehot.shape
 	assert len(x.shape)==3
+	b,t,f = x.size()
+	return b,t,f
 
 ###################################################################################################################################################
 
-def seq_clean(x, onehot):
+def seq_clean(x, onehot,
+	padding_value=0,
+	):
 	'''
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	_check(x, onehot)
-
-	x = x.masked_fill(~onehot[...,None], 0) # clean using onehot
+	b,t,f = _check(x, onehot)
+	x = x.masked_fill(~onehot[...,None], padding_value) # clean using onehot
 	return x
 
-def seq_avg_pooling(x, onehot):
+def seq_avg_pooling(x, onehot,
+	empty_seq_value=0,
+	):
 	'''
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	_check(x, onehot)
-
-	x = seq_clean(x, onehot) # important
+	b,t,f = _check(x, onehot)
 	new_onehot = onehot.clone()
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
+	x = seq_clean(x, onehot, empty_seq_value) # important
+	x = seq_clean(x, new_onehot, 0) # important
+
 	x = x.sum(dim=1)/(new_onehot.sum(dim=1)[...,None]) # (b,t,f) > (b,f)
 	return x
 
-def seq_sum_pooling(x, onehot):
+def seq_sum_pooling(x, onehot,
+	empty_seq_value=0,
+	):
 	'''
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	_check(x, onehot)
-
-	x = seq_clean(x, onehot) # important
+	b,t,f = _check(x, onehot)
 	new_onehot = onehot.clone()
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
+	x = seq_clean(x, onehot, empty_seq_value) # important
+	x = seq_clean(x, new_onehot, 0) # important
+
 	x = x.sum(dim=1) # (b,t,f) > (b,f)
 	return x
 
-def seq_last_element(x, onehot):
+def seq_last_element(x, onehot,
+	empty_seq_value=0,
+	):
 	'''
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	_check(x, onehot)
+	b,t,f = _check(x, onehot)
+	new_onehot = onehot.clone()
+	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
+	x = seq_clean(x, onehot, empty_seq_value) # important
+	x = seq_clean(x, new_onehot, 0) # important
 
-	b,t,f = x.size()
 	indexs = torch.sum(onehot[...,None], dim=1)-1 # (b,t,1) > (b,1) # -1 because index is always 1 unit less than length
 	indexs = torch.clamp(indexs, 0, None) # forced -1 -> 0 to avoid errors of empty sequences!!
 	last_x = torch.gather(x, 1, indexs[:,:,None].expand(-1,-1,f)) # index (b,t,f) > (b,1,f)
 	last_x = last_x[:,0,:]
 	return last_x
 
-def seq_min_pooling(x, onehot):
+def seq_min_pooling(x, onehot,
+	empty_seq_value=0,
+	inf=1e16,
+	):
 	'''
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	_check(x, onehot)
-
-	b,t,f = x.size()
+	b,t,f = _check(x, onehot)
 	new_onehot = onehot.clone()
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
-	infty = 1/C_.EPS
-	x = x.masked_fill(~new_onehot[...,None], +infty) # clean using onehot
+	x = seq_clean(x, onehot, empty_seq_value) # important
+	x = x.masked_fill(~new_onehot[...,None], inf) # inf imputation using onehot
+
 	x,_ = torch.min(x, dim=1)
 	return x
 
-def seq_max_pooling(x, onehot):
+def seq_max_pooling(x, onehot,
+	empty_seq_value=0,
+	inf=1e16,
+	):
 	'''
 	x (b,t,f)
 	onehot (b,t)
 	'''
-	_check(x, onehot)
-
-	b,t,f = x.size()
+	b,t,f = _check(x, onehot)
 	new_onehot = onehot.clone()
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
-	infty = 1/C_.EPS # problematic as in mcmc?
-	x = x.masked_fill(~new_onehot[...,None], -infty) # clean using onehot
+	x = seq_clean(x, onehot, empty_seq_value) # important
+	x = x.masked_fill(~new_onehot[...,None], -inf) # inf imputation using onehot
+
 	x,_ = torch.max(x, dim=1)
 	return x
+
+def seq_min_max_norm(x, onehot,
+	padding_value=0,
+	zero_diff_value=1,
+	eps=C_.EPS,
+	):
+	'''
+	x (b,t,f)
+	onehot (b,t)
+	'''
+	b,t,f = _check(x, onehot)
+
+	_min = seq_min_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
+	_max = seq_max_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
+	diff = _max-_min
+	new_x = (x-_min)/(diff+eps)
+	#print('eee',zero_diff.shape)
+	#print('to',onehot[...,None].shape)
+	zero_diff = (diff==0).repeat((1,t,1))
+	new_x = new_x.masked_fill(zero_diff, zero_diff_value) # inf imputation  using onehot
+	new_onehot = onehot.clone()
+	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
+	new_x = new_x.masked_fill(~new_onehot[...,None], padding_value) # inf imputation  using onehot
+	return new_x
+
+###################################################################################################################################################
 
 def get_seq_onehot_mask(seqlengths, max_seqlength,
 	device=None,
@@ -107,19 +151,6 @@ def get_seq_onehot_mask(seqlengths, max_seqlength,
 	return mask.bool() # (b,t)
 
 ###################################################################################################################################################
-
-def seq_min_max_norm(x, onehot):
-	'''
-	x (b,t,f)
-	onehot (b,t)
-	'''
-	_check(x, onehot)
-	#b,t,f = x.size()
-	min_ = seq_min_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
-	max_ = seq_max_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
-	#print(min_, max_)
-	diff_ = max_-min_
-	return (x-min_)/(diff_+C_.EPS)
 
 def seq_avg_norm(x, onehot):
 	'''
