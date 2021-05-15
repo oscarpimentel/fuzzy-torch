@@ -122,6 +122,7 @@ def seq_min_max_norm(x, onehot,
 	x (b,t,f)
 	onehot (b,t)
 	'''
+	assert zero_diff_value>=0 and zero_diff_value<=1
 	b,t,f = _check(x, onehot)
 
 	_min = seq_min_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
@@ -139,6 +140,38 @@ def seq_min_max_norm(x, onehot,
 
 ###################################################################################################################################################
 
+def seq_avg_norm(x, onehot, # FIXME
+	padding_value=0,
+	zero_diff_value=1,
+	eps=C_.EPS,
+	):
+	'''
+	x (b,t,f)
+	onehot (b,t)
+	'''
+	b,t,f = _check(x, onehot)
+	assert torch.all(x>=0)
+
+	avg_ = seq_avg_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
+	return x/(avg_+C_.EPS)
+
+def seq_sum_norm(x, onehot, # FIXME
+	padding_value=0,
+	zero_diff_value=1,
+	eps=C_.EPS,
+	):
+	'''
+	x (b,t,f)
+	onehot (b,t)
+	'''
+	b,t,f = _check(x, onehot)
+	assert torch.all(x>=0)
+
+	sum_ = seq_sum_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
+	return x/(sum_+C_.EPS)
+
+###################################################################################################################################################
+
 def get_seq_onehot_mask(seqlengths, max_seqlength,
 	device=None,
 	):
@@ -149,30 +182,6 @@ def get_seq_onehot_mask(seqlengths, max_seqlength,
 	mask = torch.arange(max_seqlength, device=seqlengths.device if device is None else device).expand(batch_size, max_seqlength)
 	mask = (mask < seqlengths[...,None])
 	return mask.bool() # (b,t)
-
-###################################################################################################################################################
-
-def seq_avg_norm(x, onehot):
-	'''
-	x (b,t,f)
-	onehot (b,t)
-	'''
-	_check(x, onehot)
-	assert torch.all(x>=0)
-
-	avg_ = seq_avg_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
-	return x/(avg_+C_.EPS)
-
-def seq_sum_norm(x, onehot):
-	'''
-	x (b,t,f)
-	onehot (b,t)
-	'''
-	_check(x, onehot)
-	assert torch.all(x>=0)
-
-	sum_ = seq_sum_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
-	return x/(sum_+C_.EPS)
 
 ###################################################################################################################################################
 
