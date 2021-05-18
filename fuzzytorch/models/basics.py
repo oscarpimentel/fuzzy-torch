@@ -99,7 +99,6 @@ class MLP(nn.Module):
 		in_dropout=0.0,
 		out_dropout=0.0,
 		bias=True,
-
 		dropout=0.0,
 		last_activation=C_.DEFAULT_LAST_ACTIVATION,
 		**kwargs):
@@ -111,10 +110,16 @@ class MLP(nn.Module):
 		self.input_dims = input_dims
 		self.output_dims = output_dims
 		self.embd_dims_list = [self.input_dims]+embd_dims_list+[self.output_dims]
+		self.activation = activation
+		self.in_dropout = in_dropout
+		self.out_dropout = out_dropout
+		self.bias = bias
 		self.dropout = dropout
 		self.last_activation = last_activation
+		self.reset():
 
-		activations = [activation]*(len(self.embd_dims_list)-1) # create activations along
+	def reset(self):
+		activations = [self.activation]*(len(self.embd_dims_list)-1) # create activations along
 		if not self.last_activation is None:
 			activations[-1] = self.last_activation
 
@@ -124,17 +129,16 @@ class MLP(nn.Module):
 			output_dims_ = self.embd_dims_list[k+1]
 			fc_kwargs = {
 				'activation':activations[k],
-				'in_dropout':in_dropout if k==0 else self.dropout,
-				'out_dropout':out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
-				'bias':bias,
+				'in_dropout':self.in_dropout if k==0 else self.dropout,
+				'out_dropout':self.out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
+				'bias':self.bias,
 			}
 			self.fcs.append(Linear(input_dims_, output_dims_, **fc_kwargs))
+		self.init_parameters()
 
-		self.reset()
-
-	def reset(self):
+	def init_parameters(self):
 		for fc in self.fcs:
-			fc.reset()
+			fc.init_parameters()
 
 	def get_embd_dims_list(self):
 		return self.embd_dims_list
@@ -162,21 +166,3 @@ class MLP(nn.Module):
 
 		txt = f'MLP(\n{resume})({len(self):,}[p])'
 		return txt
-
-class PMLP(nn.Module):
-	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list,
-		**kwargs):
-		super().__init__()
-		self.mlp1 = MLP(input_dims, output_dims, embd_dims_list, **kwargs)
-		self.mlp2 = MLP(input_dims, output_dims, embd_dims_list, **kwargs)
-		self.reset()
-
-	def reset(self):
-		self.mlp1.reset()
-		self.mlp2.reset()
-
-	def get_output_dims(self):
-		return self.mlp1.get_output_dims()
-
-	def forward(self, x1, x2):
-		return self.mlp1(x1), self.mlp2(x2)

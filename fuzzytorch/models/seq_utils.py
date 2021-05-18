@@ -204,7 +204,7 @@ def seq_index_mapping_(source, idxs, output,
 	output.scatter_(dim, fixed_indexs, source)
 
 def serial_to_parallel(x, onehot,
-	fill_value=0,
+	padding_value=0,
 	):
 	'''
 	x (b,t,f)
@@ -216,12 +216,12 @@ def serial_to_parallel(x, onehot,
 	s2p_mapping_indexs = (torch.cumsum(onehot, 1)-1).masked_fill(~onehot, IMD)
 	#print('s2p_mapping_indexs', s2p_mapping_indexs.shape, s2p_mapping_indexs)
 	new_shape = (x.shape[0], x.shape[1]+1, x.shape[2])
-	new_x = torch.full(new_shape, fill_value, device=x.device, dtype=x.dtype)
+	new_x = torch.full(new_shape, padding_value, device=x.device, dtype=x.dtype)
 	seq_index_mapping_(x, s2p_mapping_indexs, new_x)
 	return new_x[:,:-1,:]
 
 def parallel_to_serial(list_x, s_onehot,
-	fill_value=0,
+	padding_value=0,
 	):
 	'''
 	list_x list[(b,t,f)]
@@ -238,14 +238,15 @@ def parallel_to_serial(list_x, s_onehot,
 	modes = s_onehot.shape[-1]
 	x_ = list_x[0]
 	new_shape = (x_.shape[0], x_.shape[1]+1, x_.shape[2])
-	x_s = torch.full(new_shape, fill_value, device=x.device, dtype=x.dtype)
+	x_s = torch.full(new_shape, padding_value, device=x.device, dtype=x.dtype)
 	for i in range(modes):
 		x = list_x[i]
 		onehot = s_onehot[...,i]
 
 		IMD = onehot.shape[1]
 		s2p_mapping_indexs = (torch.cumsum(onehot, dim=1)-1).masked_fill(~onehot, IMD)
-		source = torch.cumsum(torch.ones_like(s2p_mapping_indexs, device=x.device, dtype=x.dtype)[...,None], dim=1)-1
+		source = torch.cumsum(torch.ones_like(s2p_mapping_indexs, device=x.device, dtype=x.dtype)[...,None], dim=1)
+		source = source-1 # important step to handle missing directions
 		
 		p2s_mapping_indexs = torch.full((x_.shape[0], x_.shape[1]+1, 1), IMD, device=x.device, dtype=x.dtype)
 		#print(source.shape)
