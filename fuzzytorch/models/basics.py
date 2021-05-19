@@ -116,7 +116,7 @@ class MLP(nn.Module):
 		self.bias = bias
 		self.dropout = dropout
 		self.last_activation = last_activation
-		self.reset():
+		self.reset()
 
 	def reset(self):
 		activations = [self.activation]*(len(self.embd_dims_list)-1) # create activations along
