@@ -4,7 +4,7 @@ from . import C_
 
 import torch
 import torch.nn.functional as F
-from flamingchoripan.strings import xstr
+from fuzzytools.strings import xstr
 import pandas as pd
 
 ###################################################################################################################################################

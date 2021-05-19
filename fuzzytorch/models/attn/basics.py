@@ -10,8 +10,8 @@ from .. import utils
 from . import utils as attn_utils
 from ..basics import MLP
 from torch.nn.init import xavier_uniform_, constant_, eye_
-from flamingchoripan import strings as strings
-from flamingchoripan import lists as lists
+from fuzzytools import strings as strings
+from fuzzytools import lists as lists
 from .pytorch_multihead_clone import MultiheadAttention
 #from torch.nn import MultiheadAttention
 from .batch_norms import LayerNorm, MaskedBatchNorm1d

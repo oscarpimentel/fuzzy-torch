@@ -6,12 +6,12 @@ import os
 import torch
 import numpy as np
 
-from flamingchoripan.progress_bars import ProgressBarMultiColor
-from flamingchoripan import C_ as C_fc
-from flamingchoripan import times
-from flamingchoripan import files
-from flamingchoripan import strings
-from flamingchoripan import prints
+from fuzzytools.progress_bars import ProgressBarMultiColor
+from fuzzytools import C_ as C_fc
+from fuzzytools import times
+from fuzzytools import files
+from fuzzytools import strings
+from fuzzytools import prints
 import warnings
 from . import monitors as mon
 from . import exceptions as ex

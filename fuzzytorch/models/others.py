@@ -9,7 +9,7 @@ from ..utils import tensor_to_numpy
 from .basics import Linear, MLP
 #from cnn.basics import ConvLinear
 from . import utils as utils
-import flamingchoripan.strings as strings
+import fuzzytools.strings as strings
 import numpy as np
 import math
 from .attn.batch_norms import LayerNorm, MaskedBatchNorm1d

@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .. import utils
-from flamingchoripan import strings as strings
+from fuzzytools import strings as strings
 
 ###################################################################################################################################################
 

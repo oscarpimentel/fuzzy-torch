@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from . import non_linear
 from . import utils
 from torch.nn.init import xavier_uniform_, constant_, eye_
-from flamingchoripan import strings as strings
+from fuzzytools import strings as strings
 
 ###################################################################################################################################################
 

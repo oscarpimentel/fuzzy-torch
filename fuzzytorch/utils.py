@@ -3,7 +3,7 @@ from __future__ import division
 from . import C_
 
 import torch
-import flamingchoripan.strings as strings
+import fuzzytools.strings as strings
 from torch.utils.data._utils.collate import default_collate
 
 ###################################################################################################################################################

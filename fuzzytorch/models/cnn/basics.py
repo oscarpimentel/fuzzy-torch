@@ -9,8 +9,8 @@ from .. import non_linear
 from .. import utils
 from . import utils as cnn_utils
 from torch.nn.init import xavier_uniform_, constant_, eye_
-from flamingchoripan import strings as strings
-from flamingchoripan import lists as lists
+from fuzzytools import strings as strings
+from fuzzytools import lists as lists
 
 ###################################################################################################################################################
 

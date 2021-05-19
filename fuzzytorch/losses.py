@@ -4,7 +4,7 @@ from . import C_
 
 import torch
 import torch.nn.functional as F
-from flamingchoripan.strings import xstr
+from fuzzytools.strings import xstr
 from . import exceptions as ex
 import numpy as np
 import pandas as pd

@@ -5,9 +5,9 @@ from . import C_
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import cm
-import flamingchoripan.cuteplots.colors as cc
+import fuzzytools.cuteplots.colors as cc
 from scipy.ndimage import gaussian_filter1d
-from flamingchoripan.cuteplots.utils import save_fig
+from fuzzytools.cuteplots.utils import save_fig
 
 ###################################################################################################################################################
 

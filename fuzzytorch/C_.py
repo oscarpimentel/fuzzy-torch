@@ -1,6 +1,6 @@
 import sys
 import numpy as np
-from flamingchoripan import C_ as FCC_
+from fuzzytools import C_ as FCC_
 
 ###################################################################################################################################################
 
