@@ -94,14 +94,14 @@ class TemporalEncoding(nn.Module):
 		requires_grad=False, # False True
 		random_init=False, # True False
 		scale_mode=None, # None sigmoid hardsigmoid softmax
-		time_noise=1/24, # regularization in time units: 0 None
+		time_noise_window=1/24, # regularization in time units
 		**kwargs):
 		super().__init__()
 
 		### CHECKS
 		assert te_features>0
 		assert te_features%2==0
-		assert time_noise is None or time_noise>=0
+		assert time_noise_window>=0
 
 		self.te_features = te_features
 		self.max_te_period = max_te_period
@@ -112,7 +112,7 @@ class TemporalEncoding(nn.Module):
 		self.requires_grad = requires_grad
 		self.random_init = random_init
 		self.scale_mode = scale_mode
-		self.time_noise = self.max_te_period*1e-4 if time_noise is None else time_noise
+		self.time_noise_window = time_noise_window
 		self.reset()
 
 	def reset(self):
@@ -174,7 +174,7 @@ class TemporalEncoding(nn.Module):
 			'te_periods':[f'{p:.1f}' for p in tensor_to_numpy(self.get_te_periods())],
 			'te_phases':[f'{p:.1f}' for p in tensor_to_numpy(self.get_te_phases())],
 			'scale_mode':self.scale_mode,
-			'time_noise':self.time_noise,
+			'time_noise_window':self.time_noise_window,
 			}, ', ', '=')
 		return txt
 
@@ -242,12 +242,12 @@ class TemporalEncoding(nn.Module):
 		# time (b,t)
 		assert len(time.shape)==2
 
-		if self.training and self.time_noise>0:
+		if self.training and self.time_noise_window>0:
 			#print(time, time.device)
-			uniform_noise = torch.rand(size=time.shape, device=time.device)
-			uniform_noise = self.time_noise*(uniform_noise-0.5)
+			uniform_noise = torch.rand(size=(1, time.shape[1]), device=time.device) # (1,t) # (0,1) noise
+			uniform_noise = self.time_noise_window*(uniform_noise-0.5) # k*(-0.5,0.5)
 			#print(uniform_noise)
-			time = time+uniform_noise
+			time = time+uniform_noise # (b,t)+(1,t) > (b,t)
 			#print("2",time)
 
 		ntime = self.time2ntime(time)

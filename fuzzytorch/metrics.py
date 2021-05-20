@@ -10,17 +10,17 @@ import pandas as pd
 ###################################################################################################################################################
 
 class MetricResult():
-	def __init__(self, batch_metric_,
+	def __init__(self, _batch_metric,
 		reduction_mode='mean',
 		):
-		assert len(batch_metric_.shape)==1
-		self.batch_metric_ = batch_metric_.detach()
-		self.len_ = len(self.batch_metric_)
+		assert len(_batch_metric.shape)==1
+		self._batch_metric = _batch_metric.detach()
+		self.len_ = len(self._batch_metric)
 		self.reduction_mode = reduction_mode
 		if self.reduction_mode=='mean':
-			self.batch_metric = self.batch_metric_.mean()[None]
+			self.batch_metric = self._batch_metric.mean()[None] # (b)
 		elif self.reduction_mode=='sum':
-			self.batch_metric = self.batch_metric_.sum()[None]
+			self.batch_metric = self._batch_metric.sum()[None] # (b)
 
 	def to(self, device):
 		pass
@@ -48,8 +48,11 @@ class MetricResult():
 		elif self==0 or self is None:
 			return other
 		else:
-			m = MetricResult(self.batch_metric+other.batch_metric)
-			return m
+			assert self.reduction_mode==other.reduction_mode
+			metric = MetricResult(self.batch_metric+other.batch_metric, # (b)+(b)
+				self.reduction_mode,
+				)
+			return metric
 
 	def __radd__(self, other):
 		return self+other

@@ -52,23 +52,28 @@ def batch_xentropy(y_pred, y_target,
 ###################################################################################################################################################
 
 class LossResult():
-	def __init__(self, batch_loss_,
+	def __init__(self, _batch_loss,
 		reduction_mode='mean',
 		):
-		assert len(batch_loss_.shape)==1
-		self.batch_loss_ = batch_loss_
-		self.len_ = len(self.batch_loss_)
+		assert len(_batch_loss.shape)==1
+		self._batch_loss = _batch_loss
+		self.len_ = len(self._batch_loss)
 		self.reduction_mode = reduction_mode
 		self.batch_sublosses = {}
 		if self.reduction_mode=='mean':
-			self.batch_loss = self.batch_loss_.mean()[None]
+			self.batch_loss = self._batch_loss.mean()[None] # (b)
+		elif self.reduction_mode=='sum':
+			self.batch_loss = self._batch_loss.sum()[None] # (b)
 
 	def to(self, device):
 		pass
 
 	def add_subloss(self, name, batch_subloss):
 		assert len(batch_subloss.shape)==1
-		self.batch_sublosses[name] = batch_subloss.detach().mean()[None]
+		if self.reduction_mode=='mean':
+			self.batch_sublosses[name] = batch_subloss.mean()[None] # (b)
+		elif self.reduction_mode=='sum':
+			self.batch_sublosses[name] = batch_subloss.sum()[None] # (b)
 
 	def get_loss(self,
 		get_tensor=False,
@@ -115,9 +120,12 @@ class LossResult():
 		elif self==0 or self is None:
 			return other
 		else:
-			loss = LossResult(self.batch_loss+other.batch_loss)
+			assert self.reduction_mode==other.reduction_mode
+			loss = LossResult(self.batch_loss+other.batch_loss, # (b)+(b)
+				self.reduction_mode,
+				)
 			for sl_name in self.get_sublosses_names():
-				loss.add_subloss(sl_name, self.batch_sublosses[sl_name]+other.batch_sublosses[sl_name])
+				loss.add_subloss(sl_name, self.batch_sublosses[sl_name]+other.batch_sublosses[sl_name]) # (b)+(b)
 			return loss
 
 	def __radd__(self, other):
