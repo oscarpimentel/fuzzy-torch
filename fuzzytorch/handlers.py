@@ -17,6 +17,7 @@ from . import monitors as mon
 from . import exceptions as ex
 from .utils import get_model_name, TDictHolder, minibatch_dict_collate
 from .models.utils import count_parameters
+from.files import FTFile
 
 ###################################################################################################################################################
 
@@ -55,6 +56,7 @@ class ModelTrainHandler(object):
 
 		self.device = 'cpu'
 		self.device_name = 'cpu'
+		self.file = None
 
 	def get_model_name(self):
 		self.model_name = self.model.get_name()
@@ -104,25 +106,16 @@ class ModelTrainHandler(object):
 		return txt[:-1]
 
 	def training_save_model(self, epoch, set_name):
-		saved_filedir = None
 		# check is can be saved
 		can_save_model = any([lmonitor.check_save_condition(set_name) for lmonitor in self.lmonitors])
 		if can_save_model:
-			files.create_dir(self.complete_save_roodir, verbose=0)
 			saved_filedir = f'{self.complete_save_roodir}/id{C_.KEY_VALUE_SEP_CHAR}{self.id}{C_.KEY_KEY_SEP_CHAR}epoch{C_.KEY_VALUE_SEP_CHAR}{epoch}.{C_.SAVE_FEXT}'
-
-			dic_to_save = {
-				'state_dict':self.model.state_dict(),
-				'lmonitors':{lmonitor.name:lmonitor.get_save_dict() for lmonitor in self.lmonitors},
-			}
-			torch.save(dic_to_save, saved_filedir) # SAVE MODEL
+			self.file = FTFile(saved_filedir, self.model, self.lmonitors)
 			for lmonitor in self.lmonitors:
 				lmonitor.set_last_saved_filedir(saved_filedir)
 				lmonitor.reset_early_stop() # refresh counters for all
-				#print(lmonitor.name, epoch, lmonitor.counter_epoch.get_global_count())
 				lmonitor.set_best_epoch(epoch)
-
-		return saved_filedir
+		return
 
 	def evaluate_in_set(self, set_name:str, set_loader, training_kwargs:dict,
 		):
@@ -195,8 +188,8 @@ class ModelTrainHandler(object):
 		load:bool=False,
 		k_every:int=1,
 		training_kwargs:dict={},
+		always_save=False,
 		**kwargs):
-
 		if load:
 			self.load_model()
 			return True
@@ -232,7 +225,7 @@ class ModelTrainHandler(object):
 							#for lmonitor_aux in self.lmonitors: # freeze all other models except actual
 							#	lmonitor_aux.eval() # it's neccesary????
 							#lmonitor.train() # ensure train mode!
-							lmonitor.optimizer.none_grad() # none_grad zero_grad
+							lmonitor.optimizer.zero_grad(set_to_none=True) # False True
 
 							#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
 							out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs) # Feed forward
@@ -275,8 +268,10 @@ class ModelTrainHandler(object):
 
 					### saving model
 					if evaluated:
-						saved_filedir = self.training_save_model(epoch, 'val')
+						self.training_save_model(epoch, 'val')
 						self.update_bar(training_bar, bar_text_dic)
+						if always_save:
+							self.file.save()
 
 					### end of epoch!!
 					text = f'[stop]'
@@ -299,6 +294,7 @@ class ModelTrainHandler(object):
 				can_be_in_loop = False
 				self.escape_training(training_bar, '*** ctrl+c ***')
 
+		self.file.save()
 		training_bar.done()
 		print(strings.get_bar())
 		print('End of training!!!')

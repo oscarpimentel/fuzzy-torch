@@ -51,14 +51,20 @@ class LossOptimizer:
 	def device(self):
 		return next(self.get_model_parameters()).device
 
-	def zero_grad(self):
-		self.optimizer.zero_grad()
-
-	def none_grad(self):
-		self.optimizer.zero_grad()
-		#self.optimizer.zero_grad(set_to_none=True) # bug??
-		#for param in model.parameters():
-		#	param.grad = None
+	def zero_grad(self,
+		set_to_none=False,
+		):
+		for group in self.optimizer.param_groups:
+			for p in group['params']:
+				if p.grad is not None:
+					if set_to_none:
+						p.grad = None
+					else:
+						if p.grad.grad_fn is not None:
+							p.grad.detach_()
+						else:
+							p.grad.requires_grad_(False)
+						p.grad.zero_()
 
 	def apply_clip_grad(self):
 		if not self.clip_grad is None:
@@ -80,15 +86,6 @@ class LossOptimizer:
 	def update_opt_kwargs(self):
 		for k in self.opt_kwargs.keys():
 			self.optimizer.param_groups[0][k] = self.opt_kwargs[k]
-
-	def _____(self):
-		if len(self.get_decay_kwargs())>0:
-			self.epoch_counter += 1
-			if self.epoch_counter >= self.decay_epochs_delta:
-				self.epoch_counter = 0
-				for key in self.decay_kwargs.keys():
-					for g in self.optimizer.param_groups:
-						g[key] = self.decay_kwargs[key]
 
 	def get_kwarg_value(self, key):
 		return self.optimizer.param_groups[0][key]
