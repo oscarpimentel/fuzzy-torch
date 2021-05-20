@@ -4,6 +4,7 @@ from . import C_
 
 import torch
 from fuzzytools.files import create_dir, PFile
+import copy
 
 ###################################################################################################################################################
 
@@ -12,11 +13,12 @@ class FTFile(PFile):
 	def __init__(self, filedir,
 		model=None,
 		lmonitors=None,
+		cuda=True,
 		):
 		file = None
 		if not model is None:
 			file = {
-				'state_dict':model.state_dict().copy(),
+				'state_dict':copy.deepcopy(model.state_dict()), # needs deepcopy, not just .copy()
 				'lmonitors':{lmonitor.name:lmonitor.get_save_dict() for lmonitor in lmonitors},
 				}
 		super().__init__(filedir,
