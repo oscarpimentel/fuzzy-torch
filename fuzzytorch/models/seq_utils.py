@@ -17,6 +17,27 @@ def _check(x, onehot):
 
 ###################################################################################################################################################
 
+def get_dummy_onehot(x):
+	b,t,f = x.size()
+	onehot = torch.ones((b,t), device=x.device, dtype=bool)
+	return onehot
+
+def get_dummy_not_missing_mask(x):
+	assert 0
+
+def get_seq_onehot_mask(seqlengths, max_seqlength,
+	device=None,
+	):
+	assert len(seqlengths.shape)==1
+	assert seqlengths.dtype==torch.long
+
+	batch_size = len(seqlengths)
+	mask = torch.arange(max_seqlength, device=seqlengths.device if device is None else device).expand(batch_size, max_seqlength)
+	mask = (mask < seqlengths[...,None])
+	return mask.bool() # (b,t)
+
+###################################################################################################################################################
+
 def seq_clean(x, onehot,
 	padding_value=0,
 	):
@@ -27,6 +48,63 @@ def seq_clean(x, onehot,
 	b,t,f = _check(x, onehot)
 	x = x.masked_fill(~onehot[...,None], padding_value) # clean using onehot
 	return x
+
+###################################################################################################################################################
+
+def seq_fill_missing(raw_x, not_missing_mask, onehot,
+	nan_value=0,
+	):
+	'''
+	x (b,t,f)
+	not_missing_mask (b,t,f)
+	onehot (b,t)
+	'''
+	x = raw_x.clone()
+	x[torch.isnan(x)] = nan_value
+	assert not_missing_mask.dtype==torch.bool
+	b,t,f = _check(x, onehot)
+	b,t,f = _check(not_missing_mask, onehot)
+
+	new_x = torch.zeros_like(x)
+	x_last = x[:,0,:] # (b,f)
+	for i in range(0, t): # sadly...we need a for
+		#print('i',i)
+		miss = (1-not_missing_mask[:,i,:].int()) # (b,f)
+		x_actual = x[:,i,:]
+		_x = x_actual*(1-miss)+x_last*(miss)
+		new_x[:,i,:] = _x
+		x_last = x_actual*(1-miss)+x_last*(miss)
+	return new_x
+
+def seq_dtimes(times, not_missing_mask, onehot):
+	'''
+	times (b,t,f)
+	not_missing_mask (b,t,f)
+	onehot (b,t)
+	'''
+	assert not_missing_mask.dtype==torch.bool
+	b,t,_ = _check(times[...,None], onehot)
+	b,t,f = _check(not_missing_mask, onehot)
+
+	ftimes = times[...,None].repeat(1,1,f) # (b,t) > (b,t,f)
+	cache_ftimes = seq_fill_missing(ftimes, not_missing_mask, onehot, nan_value=0) # (b,t,f)
+	#print(cache_ftimes.shape, cache_ftimes[0].permute(1,0))
+	new_cache_ftimes = torch.cat([cache_ftimes[:,0,:][:,None,:], cache_ftimes], dim=1) # (b,t,f) > (b,t+1,f)
+	#print(new_cache_ftimes.shape, new_cache_ftimes[0].permute(1,0))
+	dtimes = ftimes-new_cache_ftimes[:,:-1,:] # (b,t+1,f) > (b,t,f)
+	return dtimes
+
+###################################################################################################################################################
+
+def _seq_dtimes(times, onehot):
+	'''
+	times (b,t)
+	onehot (b,t)
+	'''
+	b,t,_ = _check(times[...,None], onehot)
+	new_times = torch.cat([times[:,0][...,None], times], dim=1)
+	dtimes = times-new_times[:,:-1]
+	return dtimes
 
 def seq_avg_pooling(x, onehot,
 	empty_seq_value=0,
@@ -169,19 +247,6 @@ def seq_sum_norm(x, onehot, # FIXME
 
 	sum_ = seq_sum_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
 	return x/(sum_+C_.EPS)
-
-###################################################################################################################################################
-
-def get_seq_onehot_mask(seqlengths, max_seqlength,
-	device=None,
-	):
-	assert len(seqlengths.shape)==1
-	assert seqlengths.dtype==torch.long
-
-	batch_size = len(seqlengths)
-	mask = torch.arange(max_seqlength, device=seqlengths.device if device is None else device).expand(batch_size, max_seqlength)
-	mask = (mask < seqlengths[...,None])
-	return mask.bool() # (b,t)
 
 ###################################################################################################################################################
 

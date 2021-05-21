@@ -301,8 +301,8 @@ class ModelTrainHandler(object):
 		for lmonitor in self.lmonitors:
 			txt = f'[{lmonitor.name}] best_epoch={lmonitor.get_best_epoch()}'
 			txt += f' - time_per_iteration={lmonitor.get_time_per_iteration()}[segs]'
-			txt += f' - time_per_epoch={lmonitor.get_time_per_epoch()/60.}[mins]'
-			txt += f' - total_time={lmonitor.get_total_time()/60.:3f}[mins]'
+			txt += f' - time_per_epoch={lmonitor.get_time_per_epoch()}[segs]'
+			txt += f' - total_time={lmonitor.get_total_time()}[segs]'
 			print(txt)
 		print(strings.get_bar(char=C_fc.TOP_SQUARE_CHAR))
 		no_error_train = not end_with_nan
