@@ -288,16 +288,12 @@ class MLSelfAttn(nn.Module):
 		assert len(onehot.shape)==2
 		assert x.shape[:-1]==onehot.shape
 		assert len(x.shape)==3
-
-		outs = []
-		scores = []
+		
 		for k,self_attn in enumerate(self.self_attns):
-			x, _scores = self_attn(x, onehot,
+			x, scores = self_attn(x, onehot,
 				mul_attn_mask,
 				return_only_actual_scores,
 				**kwargs)
-			outs += [x]
-			scores += [_scores]
 		return x, scores
 
 	def __len__(self):
@@ -476,14 +472,10 @@ class MLTimeSelfAttn(nn.Module):
 		assert len(x.shape)==3
 		assert len(time.shape)==2
 
-		outs = []
-		scores = []
 		for k,(te_film,self_attn) in enumerate(zip(self.te_films, self.self_attns)):
 			x = te_film(x, time, onehot)
-			x, _scores = self_attn(x, onehot,
+			x, scores = self_attn(x, onehot,
 				mul_attn_mask,
 				return_only_actual_scores,
 				**kwargs)
-			outs += [x]
-			scores += [_scores]
-		return outs, scores
+		return x, scores

@@ -344,7 +344,9 @@ def get_random_onehot(x, modes):
 	return onehot
 
 
-def get_seq_clipped_shape(x, new_len):
+def get_seq_clipped_shape(x, new_len,
+	padding_value=0,
+	):
 	'''
 	Used in dataset creation
 	x (t,f)
@@ -358,6 +360,6 @@ def get_seq_clipped_shape(x, new_len):
 	if new_len<=t:
 		return x[:new_len]
 	else:
-		new_x = torch.zeros(size=(new_len,f), device=x.device, dtype=x.dtype)
+		new_x = torch.full(size=(new_len,f), fill_value=padding_value, device=x.device, dtype=x.dtype)
 		new_x[:t] = x
 		return new_x
