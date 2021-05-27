@@ -29,7 +29,6 @@ class ModelTrainHandler(object):
 		epochs_max=1e4,
 		delete_all_previous_epochs_files:bool=True,
 		extra_model_name_dict={},
-		evaluate_train=True,
 		):
 		### CHECKS
 		lmonitors = [lmonitors] if isinstance(lmonitors, mon.LossMonitor) else lmonitors
@@ -44,7 +43,6 @@ class ModelTrainHandler(object):
 		self.epochs_max = int(epochs_max)
 		self.delete_all_previous_epochs_files = delete_all_previous_epochs_files
 		self.extra_model_name_dict = extra_model_name_dict.copy()
-		self.evaluate_train = evaluate_train
 		self.reset()		
 		
 	def reset(self):
@@ -174,14 +172,14 @@ class ModelTrainHandler(object):
 				prints.print_red(f'> (id={self.id}) deleting previous epochs={epochs_to_delete} in={self.complete_save_roodir}')
 				files.delete_filedirs(to_delete_filedirs, verbose=0)
 
-	def fit_loader(self, train_loader, val_loaders:dict,
+	def fit_loader(self, train_loader, eval_loaders:dict,
 		load:bool=False,
 		k_every:int=1,
 		training_kwargs:dict={},
 		always_save=False,
 		**kwargs):
-
-		val_loader = val_loaders['eval'] # fixme
+		eval_set_names = list(eval_loaders.keys())
+		assert 'val' in eval_set_names
 		if load:
 			self.load_model()
 			return True
@@ -192,7 +190,10 @@ class ModelTrainHandler(object):
 		### TRAINING - BACKPROP
 		print(strings.get_bar())
 		ks_epochs = len(train_loader)
-		training_bar = ProgressBarMultiColor(self.epochs_max*ks_epochs, ['train', 'eval-train', 'eval-val', 'early-stop'], [None, 'blue', 'red', 'yellow'])
+		training_bar = ProgressBarMultiColor(self.epochs_max*ks_epochs,
+			['train']+[f'eval:{esn}' for esn in eval_set_names]+['early-stop'],
+			[None]+['red' for esn in eval_set_names]+['yellow'],
+			)
 		bar_text_dic = {}
 		global_train_cr = times.Cronometer()
 		can_be_in_loop = True
@@ -243,18 +244,18 @@ class ModelTrainHandler(object):
 						lmonitor.add_opt_history_epoch()
 
 					### evaluation in sets
-					if self.evaluate_train:
-						eval_set = 'train'
-						text, evaluated = self.evaluate_in_set(eval_set, train_loader, training_kwargs)
-						if evaluated:
-							bar_text_dic[f'eval-{eval_set}'] = text
-							self.update_bar(training_bar, bar_text_dic)
-
-					eval_set = 'val'
-					text, evaluated = self.evaluate_in_set(eval_set, val_loader, training_kwargs)
+					'''
+					eval_set = 'train'
+					text, evaluated = self.evaluate_in_set(eval_set, train_loader, training_kwargs)
 					if evaluated:
 						bar_text_dic[f'eval-{eval_set}'] = text
 						self.update_bar(training_bar, bar_text_dic)
+					'''
+					for eval_set_name in eval_set_names:
+						text, evaluated = self.evaluate_in_set(eval_set_name, eval_loaders[eval_set_name], training_kwargs)
+						if evaluated:
+							bar_text_dic[f'eval:{eval_set_name}'] = text
+							self.update_bar(training_bar, bar_text_dic)
 
 					#print('saving model')
 					### saving model
