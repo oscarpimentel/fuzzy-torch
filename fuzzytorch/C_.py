@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 from fuzzytools import C_ as FCC_
+import torch
 
 ###################################################################################################################################################
 
@@ -42,3 +43,31 @@ PLOT_FIGSIZE = (13,4)
 PLOT_GRID_ALPHA = 0.25
 PLOT_DPI = 80
 C_MAIN_LOSS = 'k'
+
+numpy_to_torch_dtype_dict = {
+	np.bool       : torch.bool,
+	np.uint8      : torch.uint8,
+	np.int8       : torch.int8,
+	np.int16      : torch.int16,
+	np.int32      : torch.int32,
+	np.int64      : torch.int64,
+	np.float16    : torch.float16,
+	np.float32    : torch.float32,
+	np.float64    : torch.float64,
+	np.complex64  : torch.complex64,
+	np.complex128 : torch.complex128
+	}
+
+torch_to_numpy_dtype_dict = {
+	torch.bool       : np.bool,
+	torch.uint8      : np.uint8,
+	torch.int8       : np.int8,
+	torch.int16      : np.int16,
+	torch.int32      : np.int32,
+	torch.int64      : np.int64,
+	torch.float16    : np.float16,
+	torch.float32    : np.float32,
+	torch.float64    : np.float64,
+	torch.complex64  : np.complex64,
+	torch.complex128 : np.complex128
+	}

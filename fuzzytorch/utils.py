@@ -8,6 +8,9 @@ from torch.utils.data._utils.collate import default_collate
 
 ###################################################################################################################################################
 
+def get_numpy_dtype(torch_dtype):
+	return C_.torch_to_numpy_dtype_dict[torch_dtype]
+
 def tensor_to_numpy(x):
 	return x.cpu().detach().numpy()
 

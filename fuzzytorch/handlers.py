@@ -15,9 +15,10 @@ from fuzzytools import prints
 import warnings
 from . import monitors as mon
 from . import exceptions as ex
-from .utils import get_model_name, TDictHolder, minibatch_dict_collate
+from .utils import get_model_name, TDictHolder, minibatch_dict_collate, print_tdict
 from .models.utils import count_parameters
 from.files import FTFile
+import cProfile
 
 ###################################################################################################################################################
 
@@ -26,7 +27,6 @@ class ModelTrainHandler(object):
 		save_rootdir='ft-save/',
 		id=0,
 		epochs_max=1e4,
-		uses_train_eval_loader_methods=False,
 		delete_all_previous_epochs_files:bool=True,
 		extra_model_name_dict={},
 		evaluate_train=True,
@@ -42,13 +42,13 @@ class ModelTrainHandler(object):
 		self.save_rootdir = save_rootdir
 		self.id = id
 		self.epochs_max = int(epochs_max)
-		self.uses_train_eval_loader_methods = uses_train_eval_loader_methods
 		self.delete_all_previous_epochs_files = delete_all_previous_epochs_files
 		self.extra_model_name_dict = extra_model_name_dict.copy()
 		self.evaluate_train = evaluate_train
 		self.reset()		
 		
 	def reset(self):
+		torch.cuda.empty_cache()
 		self.get_model_name()
 		self.get_extra_model_name()
 		self.get_complete_model_name()
@@ -78,20 +78,13 @@ class ModelTrainHandler(object):
 	def set_complete_save_roodir(self, complete_save_roodir):
 		self.complete_save_roodir = complete_save_roodir
 
-	def clean_cache(self):
-		if self.uses_gpu:
-			torch.cuda.empty_cache()
-
-	def build_gpu(self,
-		gpu_index:int=0,
-		):
+	def build_gpu(self, device):
 		self.uses_gpu = torch.cuda.is_available()
-		if gpu_index is None or gpu_index<0 or not self.uses_gpu: # is CPU
+		if device is None or device=='cpu' or not self.uses_gpu: # is CPU
 			warnings.warn('there is not CUDA nor GPUs... Using CPU >:(')
 		else: # is GPU
-			self.device_name = torch.cuda.get_device_name(gpu_index)
-			self.device = torch.device(f'cuda:{gpu_index}')
-		
+			self.device_name = torch.cuda.get_device_name(device)
+			self.device = torch.device(device)
 		self.model.to(self.device)
 
 	def __repr__(self):
@@ -120,9 +113,6 @@ class ModelTrainHandler(object):
 	def evaluate_in_set(self, set_name:str, set_loader, training_kwargs:dict,
 		):
 		self.model.eval() # model eval mode!
-		if self.uses_train_eval_loader_methods:
-			set_loader.eval() # dataset eval mode!
-		
 		text = None
 		evaluated = False
 		with torch.no_grad():
@@ -184,12 +174,14 @@ class ModelTrainHandler(object):
 				prints.print_red(f'> (id={self.id}) deleting previous epochs={epochs_to_delete} in={self.complete_save_roodir}')
 				files.delete_filedirs(to_delete_filedirs, verbose=0)
 
-	def fit_loader(self, train_loader, val_loader,
+	def fit_loader(self, train_loader, val_loaders:dict,
 		load:bool=False,
 		k_every:int=1,
 		training_kwargs:dict={},
 		always_save=False,
 		**kwargs):
+
+		val_loader = val_loaders['eval'] # fixme
 		if load:
 			self.load_model()
 			return True
@@ -198,9 +190,6 @@ class ModelTrainHandler(object):
 		self.delete_filedirs()
 
 		### TRAINING - BACKPROP
-		if self.uses_train_eval_loader_methods:
-			train_loader.train() # dataset train mode!
-
 		print(strings.get_bar())
 		ks_epochs = len(train_loader)
 		training_bar = ProgressBarMultiColor(self.epochs_max*ks_epochs, ['train', 'eval-train', 'eval-val', 'early-stop'], [None, 'blue', 'red', 'yellow'])
@@ -208,15 +197,15 @@ class ModelTrainHandler(object):
 		global_train_cr = times.Cronometer()
 		can_be_in_loop = True
 		end_with_nan = False
+		#p = cProfile.Profile();p.enable()
 		for ke,epoch in enumerate(range(0, self.epochs_max+1)): # for epochs
 			training_kwargs.update({'_epoch':epoch})
 			try:
 				if can_be_in_loop:
 					#with torch.autograd.detect_anomaly(): # really useful but slow af
+					#print('start')
 					self.model.train() # ensure train mode!
-					if self.uses_train_eval_loader_methods:
-						train_loader.train() # dataset train mode!
-
+					#print('start2')
 					for ki,in_tdict in enumerate(train_loader): # batches loop - k
 						backprop_text = f'id={self.id} - _epoch={epoch:,}/{self.epochs_max:,}({ki:,}/{ks_epochs:,})'
 						losses_text_list = []
@@ -228,6 +217,7 @@ class ModelTrainHandler(object):
 							lmonitor.optimizer.zero_grad(set_to_none=True) # False True
 
 							#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
+							#print_tdict(in_tdict)
 							out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs) # Feed forward
 							#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
 							loss = lmonitor.loss(out_tdict, **training_kwargs)
@@ -266,6 +256,7 @@ class ModelTrainHandler(object):
 						bar_text_dic[f'eval-{eval_set}'] = text
 						self.update_bar(training_bar, bar_text_dic)
 
+					#print('saving model')
 					### saving model
 					if evaluated:
 						self.training_save_model(epoch, 'val')
@@ -273,7 +264,8 @@ class ModelTrainHandler(object):
 						if always_save:
 							self.file.save()
 
-					### end of epoch!!
+					#print('end of epoch')
+					### end of epoch
 					text = f'[stop]'
 					for lmonitor in self.lmonitors:
 						lmonitor.epoch_update() # update epoch
@@ -294,6 +286,7 @@ class ModelTrainHandler(object):
 				can_be_in_loop = False
 				self.escape_training(training_bar, '*** ctrl+c ***')
 
+		#p.disable(); p.dump_stats('prof.prof')
 		self.file.save()
 		training_bar.done()
 		print(strings.get_bar())
@@ -365,9 +358,6 @@ class ModelTrainHandler(object):
 '''	def evaluate_in_set(self, set_name:str, set_loader, training_kwargs:dict,
 		):
 		self.model.eval() # model eval mode!
-		if self.uses_train_eval_loader_methods:
-			set_loader.eval() # dataset eval mode!
-		
 		text = None
 		evaluated = False
 		with torch.no_grad():
