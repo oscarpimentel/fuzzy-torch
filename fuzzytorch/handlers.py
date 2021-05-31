@@ -25,7 +25,7 @@ import cProfile
 class ModelTrainHandler(object):
 	def __init__(self, model, lmonitors:list,
 		save_rootdir='ft-save/',
-		id=0,
+		id='0',
 		epochs_max=1e4,
 		delete_all_previous_epochs_files:bool=True,
 		extra_model_name_dict={},
@@ -166,7 +166,7 @@ class ModelTrainHandler(object):
 
 	def _delete_filedirs(self):
 		if self.delete_all_previous_epochs_files:
-			to_delete_filedirs = [f for f in files.get_filedirs(self.complete_save_roodir) if files.get_dict_from_filedir(f)['id']==str(self.id)]
+			to_delete_filedirs = [f for f in files.get_filedirs(self.complete_save_roodir) if files.get_dict_from_filedir(f)['id']==self.id]
 			if len(to_delete_filedirs)>0:
 				epochs_to_delete = [int(files.get_dict_from_filedir(f)['epoch']) for f in to_delete_filedirs]
 				prints.print_red(f'> (id={self.id}) deleting previous epochs={epochs_to_delete} in={self.complete_save_roodir}')
@@ -310,13 +310,13 @@ class ModelTrainHandler(object):
 
 	########### LOAD MODELS
 	def load_model_cpu(self,
-		target_id:int=None,
+		target_id:str=None,
 		target_epoch:int=None,
 		):
 		return self.load_model(target_id, target_epoch, 'cpu')
 
 	def load_model(self,
-		target_id:int=None,
+		target_id:str=None,
 		target_epoch:int=None,
 		map_location:str=None,
 		):
@@ -333,7 +333,7 @@ class ModelTrainHandler(object):
 
 		if target_epoch is None: # seach the last epoch with that id
 			filedics = [files.get_dict_from_filedir(filedir) for filedir in filedirs]
-			epochs = [int(filedic['epoch']) for filedic in filedics if int(filedic['id'])==target_id]
+			epochs = [int(filedic['epoch']) for filedic in filedics if filedic['id']==target_id]
 			if len(epochs)==0:
 				prints.print_red(f'*** no files with id {target_id} in {self.complete_save_roodir} ***')
 				raise Exception(f'*** no files with id {target_id} in {self.complete_save_roodir} ***')
