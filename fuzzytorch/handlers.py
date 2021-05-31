@@ -164,7 +164,7 @@ class ModelTrainHandler(object):
 		if any([int(lmonitor.needs_save()) for lmonitor in self.lmonitors]):
 			files.create_dir(self.complete_save_roodir, verbose=1)
 
-	def delete_filedirs(self):
+	def _delete_filedirs(self):
 		if self.delete_all_previous_epochs_files:
 			to_delete_filedirs = [f for f in files.get_filedirs(self.complete_save_roodir) if files.get_dict_from_filedir(f)['id']==str(self.id)]
 			if len(to_delete_filedirs)>0:
@@ -177,6 +177,7 @@ class ModelTrainHandler(object):
 		k_every:int=1,
 		training_kwargs:dict={},
 		always_save=False,
+		delete_filedirs=True,
 		**kwargs):
 		eval_set_names = list(eval_loaders.keys())
 		assert 'val' in eval_set_names
@@ -185,7 +186,8 @@ class ModelTrainHandler(object):
 			return True
 
 		self.create_dir()
-		self.delete_filedirs()
+		if delete_filedirs:
+			self._delete_filedirs()
 
 		### TRAINING - BACKPROP
 		print(strings.get_bar())
