@@ -76,13 +76,16 @@ class ModelTrainHandler(object):
 	def set_complete_save_roodir(self, complete_save_roodir):
 		self.complete_save_roodir = complete_save_roodir
 
-	def build_gpu(self, device):
-		self.uses_gpu = torch.cuda.is_available()
-		if device is None or device=='cpu' or not self.uses_gpu: # is CPU
+	def build_gpu(self, device:str):
+		uses_gpu = torch.cuda.is_available()
+		device = 'cpu' if device is None or not uses_gpu else device
+		if device=='cpu': # is CPU
 			warnings.warn('there is not CUDA nor GPUs... Using CPU >:(')
+			self.device_name = 'cpu'
+			self.device = 'cpu'
 		else: # is GPU
 			self.device_name = torch.cuda.get_device_name(device)
-			self.device = torch.device(device)
+			self.device = device
 		self.model.to(self.device)
 
 	def __repr__(self):
@@ -308,17 +311,9 @@ class ModelTrainHandler(object):
 		training_bar.done()
 		prints.print_red(msj)
 
-	########### LOAD MODELS
-	def load_model_cpu(self,
-		target_id:str=None,
-		target_epoch:int=None,
-		):
-		return self.load_model(target_id, target_epoch, 'cpu')
-
 	def load_model(self,
 		target_id:str=None,
 		target_epoch:int=None,
-		map_location:str=None,
 		):
 		if target_id is None:
 			target_id = self.id
@@ -345,11 +340,7 @@ class ModelTrainHandler(object):
 		to_load_filedir = f'{self.complete_save_roodir}/id{C_.KEY_VALUE_SEP_CHAR}{target_id}{C_.KEY_KEY_SEP_CHAR}epoch{C_.KEY_VALUE_SEP_CHAR}{target_epoch}.{C_.SAVE_FEXT}'
 		prints.print_blue(f'> loading model={to_load_filedir}')
 
-		if map_location is None: # is GPU
-			loaded_dic = torch.load(to_load_filedir)
-		else:
-			loaded_dic = torch.load(to_load_filedir, map_location='cpu')
-
+		loaded_dic = torch.load(to_load_filedir, map_location=self.device)
 		self.model.load_state_dict(loaded_dic['state_dict'])
 		for lmonitor in self.lmonitors:
 			#lmonitor.history_dict = loaded_dic['lmonitors'][lmonitor.name]
