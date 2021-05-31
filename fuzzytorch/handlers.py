@@ -25,7 +25,7 @@ import cProfile
 class ModelTrainHandler(object):
 	def __init__(self, model, lmonitors:list,
 		save_rootdir='ft-save/',
-		id='0',
+		id='1000', # fixme > mid
 		epochs_max=1e4,
 		delete_all_previous_epochs_files:bool=True,
 		extra_model_name_dict={},
