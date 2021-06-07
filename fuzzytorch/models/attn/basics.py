@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from .. import non_linear
 from .. import utils
 from . import utils as attn_utils
-from ..basics import MLP
+from ..basics import MLP, ResidualBlockHandler
 from torch.nn.init import xavier_uniform_, constant_, eye_
 from fuzzytools import strings as strings
 from fuzzytools import lists as lists
@@ -18,6 +18,46 @@ from .batch_norms import LayerNorm, MaskedBatchNorm1d
 from ..others import TimeFILM
 from .. import seq_utils as seq_utils
 import numpy as np
+
+###################################################################################################################################################
+
+class SelfAttnWrapper(nn.Module):
+	def __init__(self, attn_module,
+		uses_permutation=True,
+		**kwargs):
+		super().__init__()
+		self.attn_module = attn_module
+		self.uses_permutation = uses_permutation
+		self.reset()
+
+	def reset(self):
+		if hasattr(self.attn_module, 'reset'):
+			self.attn_module.reset()
+		self.reset_parameters()
+
+	def reset_parameters(self):
+		if hasattr(self.attn_module, 'reset_parameters'):
+			self.attn_module.reset_parameters()
+
+	def __len__(self):
+		return len(self.attn_module)
+
+	def __repr__(self):
+		return str(self.attn_module)
+
+	def forward(self, x,
+		**kwargs):
+		queries = x.permute(1,0,2) if self.uses_permutation else x # (b,t,f) > (t,b,f)
+		keys = x.permute(1,0,2) if self.uses_permutation else x # (b,t,f) > (t,b,f)
+		values = x.permute(1,0,2) if self.uses_permutation else x # (b,t,f) > (t,b,f)
+		if kwargs.get('need_weights', True):
+			contexts, scores = self.attn_module(queries, keys, values, **kwargs) # (t,b,f) > (t,b,f)
+			contexts = contexts.permute(1,0,2) if self.uses_permutation else contexts # (t,b,f) > (b,t,f)
+			return contexts, scores
+		else:
+			contexts = self.attn_module(queries, keys, values, **kwargs) # (t,b,f) > (t,b,f)
+			contexts = contexts.permute(1,0,2) if self.uses_permutation else contexts # (t,b,f) > (b,t,f)
+			return contexts
 
 ###################################################################################################################################################
 
@@ -35,7 +75,7 @@ class SelfAttn(nn.Module):
 		uses_length_wise_batchnorm=True,
 		mlp_k=2, # ajusted to fit rnn parameters
 		bypass_mlp=False,
-		norm_mode=None, # fixme
+		norm_mode='none',
 		**kwargs):
 		super().__init__()
 		### CHECKS
@@ -64,9 +104,12 @@ class SelfAttn(nn.Module):
 
 	def reset(self):
 		self.head_dim = self.input_dims//self.num_heads
+		self.in_dropout_f = nn.Dropout(self.in_dropout)
+		self.out_dropout_f = nn.Dropout(self.out_dropout)
+		self.activation_f = non_linear.get_activation(self.activation)
 
 		### ATTN
-		attn_kwargs = {
+		mhattn_kwargs = {
 			'dropout':self.attn_dropout,
 			'bias':self.bias,
 			'add_bias_kv':False,
@@ -74,12 +117,13 @@ class SelfAttn(nn.Module):
 			'kdim':None,
 			'vdim':None,
 		}
-		self.mh_attn = MultiheadAttention(self.input_dims, self.num_heads, **attn_kwargs)
-		self.in_dropout_f = nn.Dropout(self.in_dropout)
-		self.out_dropout_f = nn.Dropout(self.out_dropout)
-		self.res1_dropout_f = nn.Dropout(self.residual_dropout)
+		self.self_mh_attn = SelfAttnWrapper(MultiheadAttention(self.input_dims, self.num_heads, **mhattn_kwargs))
+		self.attn_res_block = ResidualBlockHandler(self.self_mh_attn,
+			MaskedBatchNorm1d(self.input_dims) if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims),
+			norm_mode=self.norm_mode,
+			residual_dropout=self.residual_dropout,
+			)
 		self.res2_dropout_f = nn.Dropout(self.residual_dropout)
-		self.attn_bn = MaskedBatchNorm1d(self.input_dims) if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
 
 		### MLP
 		mlp_kwargs = {
@@ -90,11 +134,11 @@ class SelfAttn(nn.Module):
 			'dropout':self.mlp_dropout,
 			'last_activation':'linear', # transformer
 		}
-		if not self.bypass_mlp:
+		if self.bypass_mlp:
+			pass
+		else:
 			self.mlp = MLP(self.input_dims, self.output_dims, [int(self.input_dims*self.mlp_k)]*1, **mlp_kwargs)
 			self.mlp_bn = MaskedBatchNorm1d(self.input_dims) if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
-		
-		self.activation_f = non_linear.get_activation(self.activation)
 
 	def register_src_mask(self, max_curve_length, device):
 		max_curve_length_changed = not max_curve_length==self.max_curve_length
@@ -141,7 +185,7 @@ class SelfAttn(nn.Module):
 		'''
 		Parameters
 		----------
-		x (b,t,in): input tensor.
+		x (b,t,f): input tensor.
 		onehot (b,t)
 
 		Return
@@ -150,40 +194,41 @@ class SelfAttn(nn.Module):
 		scores: (b,h,t,qt)
 		'''
 		self.register_src_mask(x.shape[1], x.device)
-
 		new_onehot = onehot.clone()
 		new_onehot[:,0] = True # forced to avoid errors of empty bands sequences
 		x = self.in_dropout_f(x)
-		sub_x = self.attn_bn(x, onehot) if self.norm_mode=='pre' else x # PRE NORM
 
-		### ATTN
-		attn_kwargs = {
+		### attn
+		mhattn_kwargs = {
 			'key_padding_mask':~new_onehot,
 			'attn_mask':self.src_mask,
 			'mul_attn_mask':mul_attn_mask,
-			'need_weights':True,
 			}
-		queries = sub_x.permute(1,0,2)
-		keys = sub_x.permute(1,0,2)
-		values = sub_x.permute(1,0,2)
-		sub_x, scores = self.mh_attn(queries, keys, values, **attn_kwargs)
+		x, scores = self.attn_res_block(x, f_returns_tuple=True, f_kwargs=mhattn_kwargs)
 		scores = scores.detach()
 
-		x = sub_x+self.res1_dropout_f(values) # RES
-		x = x.permute(1,0,2)
-		x = self.attn_bn(x, onehot) if self.norm_mode=='post' else x # POST NORM
+		# f_x = self.attn_bn(x, onehot) if self.norm_mode=='pre' else x # PRE NORM
+		# f_x, scores = self.self_mh_attn(f_x, attn_kwargs=mhattn_kwargs)
+		# scores = scores.detach()
+		# x = self.res1_dropout_f(values)+f_x # x=x+f(x)
+		# x = x.permute(1,0,2)
+		# x = self.attn_bn(x, onehot) if self.norm_mode=='post' else x # POST NORM
 
 		### MLP
-		if not self.bypass_mlp:
-			sub_x = self.mlp_bn(x, onehot) if self.norm_mode=='pre' else x # PRE NORM
-			sub_x = self.mlp(sub_x)
-			x = sub_x+self.res2_dropout_f(x) # RES
+		if self.bypass_mlp:
+			pass
+		else:
+			assert 0, 'fixme'
+			f_x = self.mlp_bn(x, onehot) if self.norm_mode=='pre' else x # PRE NORM
+			f_x = self.mlp(f_x)
+			x = self.res2_dropout_f(x)+f_x # x=x+f(x)
 			x = self.mlp_bn(x, onehot) if self.norm_mode=='post' else x # POST NORM
 
 		### ACTIVATION
 		x = self.activation_f(x, dim=-1)
 		x = self.out_dropout_f(x)
 		
+		### scores
 		if return_only_actual_scores:
 			b,h,t,qt = scores.size()
 			scores = scores.permute(0,2,1,3) # (b,h,t,qt) > (b,t,h,qt)
@@ -192,6 +237,8 @@ class SelfAttn(nn.Module):
 			scores = scores.reshape(b,h,qt)
 
 		return x, scores
+
+###################################################################################################################################################
 
 class MLSelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list,
@@ -365,7 +412,9 @@ class MLTimeSelfAttn(nn.Module):
 		attn_dropout=0.0,
 		bias=True,
 		uses_length_wise_batchnorm=1,
-		scale_mode='softmax',
+		kernel_size=2,
+		time_noise_window=0,
+		fourier_dims=None,
 		**kwargs):
 		super().__init__()
 
@@ -390,7 +439,9 @@ class MLTimeSelfAttn(nn.Module):
 		self.attn_dropout = attn_dropout
 		self.bias = bias
 		self.uses_length_wise_batchnorm = uses_length_wise_batchnorm
-		self.scale_mode = scale_mode
+		self.kernel_size = kernel_size
+		self.time_noise_window = time_noise_window
+		self.fourier_dims = fourier_dims
 
 		activations = [activation]*(len(self.embd_dims_list)-1) # create activations along
 		if not self.last_activation is None:
@@ -403,12 +454,14 @@ class MLTimeSelfAttn(nn.Module):
 			input_dims_ = self.embd_dims_list[k]
 			output_dims_ = self.embd_dims_list[k+1]
 			
-			film_kwargs = {
-				#'in_dropout':self.dropout,
+			te_film_kwargs = {
+				'kernel_size':self.kernel_size,
+				'time_noise_window':self.time_noise_window,
+				'fourier_dims':self.fourier_dims,
 				}
-			film = TimeFILM(input_dims_, self.te_features, self.max_te_period, **film_kwargs)
-			print('film:',film)
-			self.te_films += [film]
+			te_film = TimeFILM(input_dims_, self.te_features, self.max_te_period, **te_film_kwargs)
+			print('te_film:',te_film)
+			self.te_films += [te_film]
 
 			attn_kwargs = {
 				'max_curve_length':self.max_curve_length,

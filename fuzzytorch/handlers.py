@@ -213,7 +213,6 @@ class ModelTrainHandler(object):
 					self.model.train() # ensure train mode!
 					#print('start2')
 					for ki,in_tdict in enumerate(train_loader): # batches loop - k
-						backprop_text = f'id={self.id} - _epoch={epoch:,}/{self.epochs_max:,}({ki:,}/{ks_epochs:,})'
 						losses_text_list = []
 						for kt,lmonitor in enumerate(self.lmonitors): # along train lmonitors
 							lmonitor_cr = times.Cronometer()
@@ -233,7 +232,7 @@ class ModelTrainHandler(object):
 							with torch.no_grad():
 								### save loss to history & bar text
 								lmonitor.add_loss_history_k(loss, lmonitor_cr.dt())
-								losses_text_list.append(f'[{lmonitor.name}] b={len(loss):,} - _loss={str(loss)} {lmonitor_cr}')
+								losses_text_list += [f'[{lmonitor.name}] b={len(loss):,} - _loss={str(loss)} {lmonitor_cr}']
 								lmonitor.k_update() # update k
 
 						if ki>0:
@@ -241,6 +240,7 @@ class ModelTrainHandler(object):
 							pass
 						
 						### TEXT
+						backprop_text = f'id={self.id} - _epoch={epoch:,}/{self.epochs_max:,}({ki:,}/{ks_epochs:,})'
 						bar_text_dic['train'] = backprop_text + ''.join(losses_text_list)
 						self.update_bar(training_bar, bar_text_dic)
 					

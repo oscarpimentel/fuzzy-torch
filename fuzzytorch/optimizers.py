@@ -13,6 +13,7 @@ class LossOptimizer:
 		clip_grad=None,
 		model_get_parameters_f=None,
 		**kwargs):
+		assert isinstance(to_optimize_model, nn.Module)
 		self.to_optimize_model = to_optimize_model
 		self.opt_class = opt_class
 		self.opt_kwargs_f = opt_kwargs_f
@@ -23,7 +24,19 @@ class LossOptimizer:
 	def reset(self):
 		self.epoch_counter = 0
 		self.calcule_opt_kwargs()
+		self.to_optimize_model = self.to_optimize_model if self.model_get_parameters_f is None else getattr(self.to_optimize_model, self.model_get_parameters_f)()
 		self.generate_mounted_optimizer()
+		self.set_gradient_clip_hooks()
+
+	def get_model_parameters(self):
+		return self.to_optimize_model.parameters() # iterable that exahuste
+
+	def set_gradient_clip_hooks(self):
+		if not self.clip_grad is None:
+			assert self.clip_grad>0
+			for p in self.get_model_parameters():
+				if p.requires_grad:
+					p.register_hook(lambda grad:torch.clamp(grad, -self.clip_grad, self.clip_grad))
 
 	def calcule_opt_kwargs(self):
 		self.opt_kwargs = {}
@@ -32,23 +45,18 @@ class LossOptimizer:
 			self.opt_kwargs[k] = v
 
 	def generate_mounted_optimizer(self):
-		assert isinstance(self.to_optimize_model, nn.Module)
-		self.optimizer = self.opt_class(self.get_model_parameters())
-		self.update_opt_kwargs()
-
-	def get_model_parameters(self):
-		return self.to_optimize_model.parameters() if self.model_get_parameters_f is None else getattr(self.to_optimize_model, self.model_get_parameters_f)()
+		self.optimizer = self.opt_class(self.get_model_parameters(), **self.opt_kwargs)
 
 	def __len__(self):
 		return sum(p.numel() for p in self.get_model_parameters() if p.requires_grad)
 
-	def train(self):
-		self.to_optimize_model.train()
+	# def train(self):
+		# self.to_optimize_model.train()
 
-	def eval(self):
-		self.to_optimize_model.eval()
+	# def eval(self):
+		# self.to_optimize_model.eval()
 		
-	def device(self):
+	def get_device(self):
 		return next(self.get_model_parameters()).device
 
 	def zero_grad(self,
@@ -66,12 +74,12 @@ class LossOptimizer:
 							p.grad.requires_grad_(False)
 						p.grad.zero_()
 
-	def apply_clip_grad(self):
-		if not self.clip_grad is None:
-			torch.nn.utils.clip_grad_norm_(self.get_model_parameters(), self.clip_grad)
+	# def apply_clip_grad(self):
+		# if not self.clip_grad is None:
+			# torch.nn.utils.clip_grad_norm_(self.get_model_parameters(), self.clip_grad)
 
 	def step(self):
-		self.apply_clip_grad()
+		# self.apply_clip_grad()
 		self.optimizer.step()
 
 	def get_opt_kwargs(self):
@@ -80,15 +88,17 @@ class LossOptimizer:
 	def update(self):
 		self.epoch_counter += 1
 		self.calcule_opt_kwargs()
-		#print(self.opt_kwargs)
 		self.update_opt_kwargs()
 
 	def update_opt_kwargs(self):
-		for k in self.opt_kwargs.keys():
-			self.optimizer.param_groups[0][k] = self.opt_kwargs[k]
+		for param_group in self.optimizer.param_groups:
+			# print('keys',param_group.keys(), self.opt_kwargs.keys())
+			for k in self.opt_kwargs.keys():
+				param_group[k] = self.opt_kwargs[k]
 
 	def get_kwarg_value(self, key):
-		return self.optimizer.param_groups[0][key]
+		for param_group in self.optimizer.param_groups:
+			return param_group[key]
 
 	def get_info(self):
 		opt_kwargs = self.get_opt_kwargs()

@@ -7,8 +7,74 @@ import torch.nn as nn
 import torch.nn.functional as F
 from . import non_linear
 from . import utils
-from torch.nn.init import xavier_uniform_, constant_, eye_
 from fuzzytools import strings as strings
+
+###################################################################################################################################################
+
+class DummyModule(nn.Module):
+	def __init__(self, *args, **kwargs):
+		super().__init__()
+		pass
+
+	def reset(self):
+		pass
+
+	def reset_parameters(self):
+		pass
+
+###################################################################################################################################################
+
+class ResidualBlockHandler(nn.Module):
+	def __init__(self, f,
+		norm=None,
+		norm_mode='none',
+		activation='linear',
+		residual_dropout=0.0,
+		**kwargs):
+		super().__init__()
+		### CHECKS
+		assert residual_dropout>=0 and residual_dropout<=1
+		assert norm_mode in ['none', 'pre_norm', 'post_norm']
+
+		self.f = f
+		self.norm = DummyModule() if norm is None else norm
+		self.norm_mode = norm_mode
+		self.activation = activation
+		self.residual_dropout = residual_dropout
+		self.reset()
+
+	def reset(self):
+		self.activation_f = non_linear.get_activation(self.activation)
+		self.residual_dropout_f = nn.Dropout(self.residual_dropout)
+		if hasattr(self.f, 'reset'):
+			self.f.reset()
+		if hasattr(self.norm, 'reset'):
+			self.norm.reset()
+		self.reset_parameters()
+
+	def reset_parameters(self):
+		if hasattr(self.f, 'reset_parameters'):
+			self.f.reset_parameters()
+		if hasattr(self.norm, 'reset_parameters'):
+			self.norm.reset_parameters()
+		
+	def forward(self, x,
+		f_args=[],
+		f_kwargs={},
+		norm_args=[],
+		norm_kwargs={},
+		f_returns_tuple=False,
+		):
+		fx_args = self.f(self.norm(x, *norm_args, **norm_kwargs), *f_args, **f_kwargs) if self.norm_mode=='pre_norm' else self.f(x, *f_args, **f_kwargs)
+		fx = fx_args[0] if f_returns_tuple else fx_args
+		new_x = x+self.residual_dropout_f(fx) # x+f(x)
+		new_x = self.norm(new_x, *norm_args, **norm_kwargs) if self.norm_mode=='post_norm' else new_x
+		new_x = self.activation_f(new_x, dim=-1)
+		assert x.shape==new_x.shape
+		if f_returns_tuple:
+			return tuple([new_x])+fx_args[1:]
+		else:
+			return new_x
 
 ###################################################################################################################################################
 
@@ -18,9 +84,8 @@ class Linear(nn.Module):
 		in_dropout=0.0,
 		out_dropout=0.0,
 		bias=True,
-		uses_custom_non_linear_init=False,
 		split_out=1,
-		bias_value=0.,
+		bias_value=None,
 		**kwargs):
 		super().__init__()
 		### CHECKS
@@ -34,7 +99,6 @@ class Linear(nn.Module):
 		self.in_dropout = in_dropout
 		self.out_dropout = out_dropout
 		self.bias = bias
-		self.uses_custom_non_linear_init = uses_custom_non_linear_init
 		self.split_out = split_out
 		self.bias_value = bias_value
 		self.reset()
@@ -44,13 +108,13 @@ class Linear(nn.Module):
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
 		self.linear = nn.Linear(self.input_dims, self.output_dims*self.split_out, bias=self.bias)
 		self.activation_f = non_linear.get_activation(self.activation)
-		self.init_parameters()
+		self.reset_parameters()
 
-	def init_parameters(self):
-		if self.uses_custom_non_linear_init:
-			xavier_uniform_(self.linear.weight, gain=non_linear.get_xavier_gain(self.activation))
-		if not self.bias is not None:
-			constant_(self.linear.bias, self.bias_value)
+	def reset_parameters(self):
+		self.linear.reset_parameters()
+		# torch.nn.init.xavier_uniform_(self.linear.weight, gain=non_linear.get_xavier_gain(self.activation)) # ugly bug???
+		if not self.bias is None and not self.bias_value is None:
+			torch.nn.init.constant_(self.linear.bias, self.bias_value)
 
 	def get_output_dims(self):
 		return self.output_dims
@@ -134,11 +198,11 @@ class MLP(nn.Module):
 				'bias':self.bias,
 			}
 			self.fcs.append(Linear(input_dims_, output_dims_, **fc_kwargs))
-		self.init_parameters()
+		self.reset_parameters()
 
-	def init_parameters(self):
+	def reset_parameters(self):
 		for fc in self.fcs:
-			fc.init_parameters()
+			fc.reset_parameters()
 
 	def get_embd_dims_list(self):
 		return self.embd_dims_list
