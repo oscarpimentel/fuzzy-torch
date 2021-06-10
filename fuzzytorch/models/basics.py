@@ -57,7 +57,15 @@ class ResidualBlockHandler(nn.Module):
 			self.f.reset_parameters()
 		if hasattr(self.norm, 'reset_parameters'):
 			self.norm.reset_parameters()
-		
+	
+	def norm_x(x,
+		norm_args=[],
+		norm_kwargs={},
+		):
+		new_x = self.norm(x, *norm_args, **norm_kwargs)
+		assert new_x.shape==x.shape
+		return new_x
+
 	def forward(self, x,
 		f_args=[],
 		f_kwargs={},
@@ -65,10 +73,10 @@ class ResidualBlockHandler(nn.Module):
 		norm_kwargs={},
 		f_returns_tuple=False,
 		):
-		fx_args = self.f(self.norm(x, *norm_args, **norm_kwargs), *f_args, **f_kwargs) if self.norm_mode=='pre_norm' else self.f(x, *f_args, **f_kwargs)
+		fx_args = self.f(self.norm_x(x, norm_args, norm_kwargs), *f_args, **f_kwargs) if self.norm_mode=='pre_norm' else self.f(x, *f_args, **f_kwargs)
 		fx = fx_args[0] if f_returns_tuple else fx_args
 		new_x = x+self.residual_dropout_f(fx) # x+f(x)
-		new_x = self.norm(new_x, *norm_args, **norm_kwargs) if self.norm_mode=='post_norm' else new_x
+		new_x = self.norm_x(x, norm_args, norm_kwargs) if self.norm_mode=='post_norm' else new_x
 		new_x = self.activation_f(new_x, dim=-1)
 		assert x.shape==new_x.shape
 		if f_returns_tuple:

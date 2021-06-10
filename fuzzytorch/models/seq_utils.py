@@ -118,7 +118,6 @@ def seq_avg_pooling(x, onehot,
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
 	x = seq_clean(x, onehot, empty_seq_value) # important
 	x = seq_clean(x, new_onehot, 0) # important
-
 	x = x.sum(dim=1)/(new_onehot.sum(dim=1)[...,None]) # (b,t,f) > (b,f)
 	return x
 
@@ -134,7 +133,6 @@ def seq_sum_pooling(x, onehot,
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
 	x = seq_clean(x, onehot, empty_seq_value) # important
 	x = seq_clean(x, new_onehot, 0) # important
-
 	x = x.sum(dim=1) # (b,t,f) > (b,f)
 	return x
 

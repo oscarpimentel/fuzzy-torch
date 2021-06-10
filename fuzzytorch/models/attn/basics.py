@@ -72,9 +72,8 @@ class SelfAttn(nn.Module):
 		mlp_dropout=0.0,
 		residual_dropout=0.0,
 		bias=True,
-		uses_length_wise_batchnorm=True,
-		mlp_k=2, # ajusted to fit rnn parameters
-		bypass_mlp=False,
+		uses_length_wise_batchnorm=True, # fixme
+		mlp_k=None,
 		norm_mode='none',
 		**kwargs):
 		super().__init__()
@@ -84,6 +83,7 @@ class SelfAttn(nn.Module):
 		assert out_dropout>=0 and out_dropout<=1
 		assert attn_dropout>=0 and attn_dropout<=1
 		assert mlp_dropout>=0 and mlp_dropout<=1
+		assert residual_dropout>=0 and residual_dropout<=1
 
 		self.input_dims = input_dims
 		self.output_dims = output_dims
@@ -98,7 +98,11 @@ class SelfAttn(nn.Module):
 		self.bias = bias
 		self.uses_length_wise_batchnorm = uses_length_wise_batchnorm
 		self.mlp_k = mlp_k
-		self.bypass_mlp = bypass_mlp
+
+
+		self.mlp_k = 2
+
+
 		self.norm_mode = norm_mode
 		self.reset()
 
@@ -107,7 +111,7 @@ class SelfAttn(nn.Module):
 		self.in_dropout_f = nn.Dropout(self.in_dropout)
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
 		self.activation_f = non_linear.get_activation(self.activation)
-
+		self.bypass_mlp = self.mlp_k is None
 		### ATTN
 		mhattn_kwargs = {
 			'dropout':self.attn_dropout,
@@ -123,22 +127,25 @@ class SelfAttn(nn.Module):
 			norm_mode=self.norm_mode,
 			residual_dropout=self.residual_dropout,
 			)
-		self.res2_dropout_f = nn.Dropout(self.residual_dropout)
 
 		### MLP
-		mlp_kwargs = {
-			'activation':'relu', # transformer
-			'in_dropout':0.,
-			'out_dropout':0.,
-			'bias':self.bias,
-			'dropout':self.mlp_dropout,
-			'last_activation':'linear', # transformer
-		}
 		if self.bypass_mlp:
 			pass
 		else:
+			mlp_kwargs = {
+				'activation':'relu', # transformer
+				'in_dropout':0.,
+				'out_dropout':0.,
+				'bias':self.bias,
+				'dropout':self.mlp_dropout,
+				'last_activation':'linear', # transformer
+				}
 			self.mlp = MLP(self.input_dims, self.output_dims, [int(self.input_dims*self.mlp_k)]*1, **mlp_kwargs)
-			self.mlp_bn = MaskedBatchNorm1d(self.input_dims) if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
+			self.mlp_res_block = ResidualBlockHandler(self.mlp,
+				MaskedBatchNorm1d(self.input_dims) if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims),
+				norm_mode=self.norm_mode,
+				residual_dropout=self.residual_dropout,
+				)
 
 	def register_src_mask(self, max_curve_length, device):
 		max_curve_length_changed = not max_curve_length==self.max_curve_length
@@ -156,21 +163,21 @@ class SelfAttn(nn.Module):
 		
 	def extra_repr(self):
 		txt = strings.get_string_from_dict({
-		'input_dims':self.input_dims,
-		'output_dims':self.output_dims,
-		'max_curve_length':self.max_curve_length,
-		'num_heads':self.num_heads,
-		'head_dim':self.head_dim,
-		'activation':self.activation,
-		'in_dropout':self.in_dropout,
-		'out_dropout':self.out_dropout,
-		'attn_dropout':self.attn_dropout,
-		'mlp_dropout':self.mlp_dropout,
-		'bias':self.bias,
-		'mlp_k':self.mlp_k,
-		'bypass_mlp':self.bypass_mlp,
-		'norm_mode':self.norm_mode,
-		}, ', ', '=')
+			'input_dims':self.input_dims,
+			'output_dims':self.output_dims,
+			'max_curve_length':self.max_curve_length,
+			'num_heads':self.num_heads,
+			'head_dim':self.head_dim,
+			'activation':self.activation,
+			'in_dropout':self.in_dropout,
+			'out_dropout':self.out_dropout,
+			'attn_dropout':self.attn_dropout,
+			'mlp_dropout':self.mlp_dropout,
+			'residual_dropout':self.residual_dropout,
+			'bias':self.bias,
+			'mlp_k':self.mlp_k,
+			'norm_mode':self.norm_mode,
+			}, ', ', '=')
 		return txt
 
 	def __repr__(self):
@@ -218,14 +225,14 @@ class SelfAttn(nn.Module):
 		if self.bypass_mlp:
 			pass
 		else:
-			assert 0, 'fixme'
-			f_x = self.mlp_bn(x, onehot) if self.norm_mode=='pre' else x # PRE NORM
-			f_x = self.mlp(f_x)
-			x = self.res2_dropout_f(x)+f_x # x=x+f(x)
-			x = self.mlp_bn(x, onehot) if self.norm_mode=='post' else x # POST NORM
+			x = self.mlp_res_block(x)
+			# f_x = self.mlp_bn(x, onehot) if self.norm_mode=='pre' else x # PRE NORM
+			# f_x = self.mlp(f_x)
+			# x = self.res2_dropout_f(x)+f_x # x=x+f(x)
+			# x = self.mlp_bn(x, onehot) if self.norm_mode=='post' else x # POST NORM
 
 		### ACTIVATION
-		x = self.activation_f(x, dim=-1)
+		# x = self.activation_f(x, dim=-1)
 		x = self.out_dropout_f(x)
 		
 		### scores
@@ -400,6 +407,8 @@ class TimeSelfAttn(SelfAttn):
 			**kwargs)
 		return x, scores
 
+###################################################################################################################################################
+
 class MLTimeSelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, te_features, max_te_period,
 		max_curve_length=None,
@@ -410,11 +419,14 @@ class MLTimeSelfAttn(nn.Module):
 		dropout=0.0,
 		out_dropout=0.0,
 		attn_dropout=0.0,
+		mlp_dropout=0.0,
+		residual_dropout=0.0,
 		bias=True,
 		uses_length_wise_batchnorm=1,
 		kernel_size=2,
 		time_noise_window=0,
 		fourier_dims=None,
+		mod_dropout=0,
 		**kwargs):
 		super().__init__()
 
@@ -423,6 +435,8 @@ class MLTimeSelfAttn(nn.Module):
 		assert dropout>=0 and dropout<=1
 		assert out_dropout>=0 and out_dropout<=1
 		assert attn_dropout>=0 and attn_dropout<=1
+		assert mlp_dropout>=0 and mlp_dropout<=1
+		assert residual_dropout>=0 and residual_dropout<=1
 
 		self.input_dims = input_dims
 		self.output_dims = output_dims
@@ -437,32 +451,33 @@ class MLTimeSelfAttn(nn.Module):
 		self.dropout = dropout
 		self.out_dropout = out_dropout
 		self.attn_dropout = attn_dropout
+		self.mlp_dropout = mlp_dropout
+		self.residual_dropout = residual_dropout
 		self.bias = bias
 		self.uses_length_wise_batchnorm = uses_length_wise_batchnorm
 		self.kernel_size = kernel_size
 		self.time_noise_window = time_noise_window
 		self.fourier_dims = fourier_dims
+		self.mod_dropout = mod_dropout
 
 		activations = [activation]*(len(self.embd_dims_list)-1) # create activations along
 		if not self.last_activation is None:
 			activations[-1] = self.last_activation
 
 		### MODULES
-		self.te_films = nn.ModuleList()
+		self.te_film = TimeFILM(self.embd_dims_list[0], self.te_features, self.max_te_period,
+			kernel_size=self.kernel_size,
+			time_noise_window=self.time_noise_window,
+			fourier_dims=self.fourier_dims,
+			residual_dropout=self.residual_dropout,
+			mod_dropout=self.mod_dropout,
+			)
+		print('te_film:',self.te_film)
+
 		self.self_attns = nn.ModuleList()
-		for k in range(len(self.embd_dims_list)-1):
+		for k in range(0, len(self.embd_dims_list)-1):
 			input_dims_ = self.embd_dims_list[k]
 			output_dims_ = self.embd_dims_list[k+1]
-			
-			te_film_kwargs = {
-				'kernel_size':self.kernel_size,
-				'time_noise_window':self.time_noise_window,
-				'fourier_dims':self.fourier_dims,
-				}
-			te_film = TimeFILM(input_dims_, self.te_features, self.max_te_period, **te_film_kwargs)
-			print('te_film:',te_film)
-			self.te_films += [te_film]
-
 			attn_kwargs = {
 				'max_curve_length':self.max_curve_length,
 				'num_heads':self.num_heads,
@@ -470,10 +485,10 @@ class MLTimeSelfAttn(nn.Module):
 				'in_dropout':self.in_dropout if k==0 else self.dropout,
 				'out_dropout':self.out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
 				'attn_dropout':self.attn_dropout,
+				'mlp_dropout':self.mlp_dropout,
+				'residual_dropout':self.residual_dropout,
 				'bias':self.bias,
 				'uses_length_wise_batchnorm':self.uses_length_wise_batchnorm,
-				'mlp_k':0.5,
-				'bypass_mlp':1,
 				}
 			self_attn = TimeSelfAttn(input_dims_, output_dims_, **attn_kwargs)
 			self.self_attns += [self_attn]
@@ -499,7 +514,7 @@ class MLTimeSelfAttn(nn.Module):
 
 	def get_info(self):
 		d = {
-			'te_film':[te_film.get_info() for te_film in self.te_films],
+			'te_film':self.te_film.get_info(),
 			}
 		return d
 
@@ -525,8 +540,8 @@ class MLTimeSelfAttn(nn.Module):
 		assert len(x.shape)==3
 		assert len(time.shape)==2
 
-		for k,(te_film,self_attn) in enumerate(zip(self.te_films, self.self_attns)):
-			x = te_film(x, time, onehot)
+		x = self.te_film(x, time, onehot) # fixme
+		for k,self_attn in enumerate(self.self_attns):
 			x, scores = self_attn(x, onehot,
 				mul_attn_mask,
 				return_only_actual_scores,

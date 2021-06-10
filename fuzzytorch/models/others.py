@@ -65,12 +65,13 @@ def _te(te_ws, te_phases, te_scales, time,
 
 ###################################################################################################################################################
 
-class TemporalEncoding(nn.Module):
+class TemporalEncoder(nn.Module):
 	def __init__(self, te_features, max_te_period,
 		min_te_period=None, # 2 None
 		time_noise_window=0, # regularization in time units
-		init_k_exp=1,
+		init_k_exp=.5,
 		ws_phases_requires_grad=False,
+		mod_dropout=0, # dec
 		**kwargs):
 		super().__init__()
 
@@ -78,6 +79,7 @@ class TemporalEncoding(nn.Module):
 		assert te_features>0
 		assert te_features%2==0
 		assert init_k_exp>=0
+		assert mod_dropout>=0 and mod_dropout<=1
 
 		self.te_features = te_features
 		self.max_te_period = max_te_period
@@ -85,6 +87,7 @@ class TemporalEncoding(nn.Module):
 		self.time_noise_window = eval(time_noise_window) if isinstance(time_noise_window, str) else time_noise_window
 		self.init_k_exp = init_k_exp
 		self.ws_phases_requires_grad = ws_phases_requires_grad
+		self.mod_dropout = mod_dropout
 		self.reset()
 
 	def reset(self):
@@ -127,6 +130,7 @@ class TemporalEncoding(nn.Module):
 			'te_scales':[f'{p:.5f}' for p in tensor_to_numpy(self.get_te_scales())],
 			'time_noise_window':self.time_noise_window,
 			'init_k_exp':self.init_k_exp,
+			'mod_dropout':self.mod_dropout,
 			}, ', ', '=')
 		return txt
 
@@ -144,7 +148,7 @@ class TemporalEncoding(nn.Module):
 		return d
 
 	def __repr__(self):
-		txt = f'TemporalEncoding({self.extra_repr()})'
+		txt = f'TemporalEncoder({self.extra_repr()})'
 		txt += f'({len(self):,}[p])'
 		return txt
 
@@ -177,7 +181,11 @@ class TemporalEncoding(nn.Module):
 			uniform_noise = self.time_noise_window*(uniform_noise-0.5) # k*(-0.5,0.5)
 			#print(uniform_noise)
 			time = time+uniform_noise # (b,t)+(1,t) > (b,t)
-			#print("2",time)
+
+		if self.training and self.mod_dropout>0:
+			# time = time*torch.bernoulli(torch.full(time.shape, fill_value=1-self.mod_dropout, device=time.device))
+			pass
+		#print("2",time)
 
 		te_ws = self.get_te_ws()
 		te_phases = self.get_te_phases()
@@ -199,10 +207,12 @@ class TimeFILM(nn.Module):
 		time_noise_window=0, # regularization in time units
 		activation='relu',
 		residual_dropout=0,
+		mod_dropout=0,
 		**kwargs):
 		super().__init__()
 		### CHECKS
 		assert residual_dropout>=0 and residual_dropout<=1
+		assert mod_dropout>=0 and mod_dropout<=1
 
 		self.input_dims = input_dims
 		self.te_features = te_features
@@ -215,6 +225,7 @@ class TimeFILM(nn.Module):
 		self.time_noise_window = time_noise_window
 		self.activation = activation
 		self.residual_dropout = residual_dropout
+		self.mod_dropout = mod_dropout
 		self.reset()
 
 	def reset(self):
@@ -225,14 +236,19 @@ class TimeFILM(nn.Module):
 		assert self.input_dims>0
 		te_kwargs = {
 			'time_noise_window':self.time_noise_window,
+			'mod_dropout':self.mod_dropout,
 		}
-		self.te_mod_alpha = TemporalEncoding(self.te_features, self.max_te_period, **te_kwargs)
-		#self.te_mod_beta = TemporalEncoding(self.te_features, self.max_te_period)
-		print('te_mod_alpha:',self.te_mod_alpha)
+		self.temporal_encoder = TemporalEncoder(self.te_features, self.max_te_period, **te_kwargs)
+		#self.te_mod_beta = TemporalEncoder(self.te_features, self.max_te_period)
+		print('temporal_encoder:',self.temporal_encoder)
 
 		#self.gamma_f = Linear(self.te_features, self.fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
 		#self.beta_f = Linear(self.te_features, self.fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
 		self.gamma_beta_f = Linear(self.te_features, self.fourier_dims, split_out=2, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
+
+		# for param in self.gamma_beta_f.parameters():
+			# param.requires_grad = False
+
 		# torch.nn.init.constant_(self.gamma_beta_f.linear.weight, 1.)
 
 		#self.gamma_w = nn.Parameter(torch.ones((self.mod_output_dims, self.mod_input_dims)), requires_grad=False)
@@ -258,22 +274,30 @@ class TimeFILM(nn.Module):
 		d = {
 			'weight':tensor_to_numpy(self.gamma_beta_f.linear.weight),
 			}
-		d.update(self.te_mod_alpha.get_info())
+		d.update(self.temporal_encoder.get_info())
 		return d
 
 	def f_mod(self, x, time, onehot):
 		#gamma = self.gamma_f(torch.cat([x,mod], dim=-1))
-		#gamma = self.gamma_f(te_alpha)
+		#gamma = self.gamma_f(temporal_encoding)
 		#beta = self.beta_f(te_beta)
-		te_alpha = self.te_mod_alpha(time)
-		gamma, beta = self.gamma_beta_f(te_alpha)
+		temporal_encoding = self.temporal_encoder(time)
+		gamma, beta = self.gamma_beta_f(temporal_encoding)
 		# gamma = gamma/math.sqrt(self.te_features//2)
 		# beta = beta/math.sqrt(self.te_features//2)
 
 		#x_mod = self.x_proj(x)*gamma+beta
 		#x_mod = x*gamma+beta
 		#gamma = _gamma+1
+
+		if self.mod_dropout>0:
+			valid_mask = torch.bernoulli(torch.full(gamma.shape, fill_value=self.mod_dropout, device=gamma.device)).bool()
+			gamma = gamma.masked_fill(valid_mask, 0)
+			beta = beta.masked_fill(valid_mask, 0)
+
 		x_mod = x*gamma+beta
+		# x_mod = x*(gamma+1)+beta
+		# x_mod = x+beta
 		# x_mod = self.x_proj(x)*gamma+beta
 
 		x_mod = x_mod.permute(0,2,1)
@@ -288,14 +312,15 @@ class TimeFILM(nn.Module):
 		assert x.shape[-1]==self.input_dims
 		#te_beta = self.te_mod_beta(time)
 		
-		#x = self.x_mod(x, te_alpha, te_beta)
+		#x = self.x_mod(x, temporal_encoding, te_beta)
 
-		#x = self.x_mod(x, te_alpha, onehot)
+		#x = self.x_mod(x, temporal_encoding, onehot)
 		#x = self.bn(x, onehot) # PRE NORM
 		#x = sub_x
 
 		fx = self.f_mod(x, time, onehot)
-		new_x = x+self.residual_dropout_f(fx) # x+f(x)
+		new_x = fx
+		# new_x = x+self.residual_dropout_f(fx) # x+f(x)
 		new_x = self.activation_f(new_x, dim=-1)
 		return new_x
 
@@ -309,6 +334,7 @@ class TimeFILM(nn.Module):
 			'input_dims':self.input_dims,
 			'fourier_dims':self.fourier_dims,
 			'kernel_size':self.kernel_size,
+			'mod_dropout':self.mod_dropout,
 			}, ', ', '=')
 		return txt
 

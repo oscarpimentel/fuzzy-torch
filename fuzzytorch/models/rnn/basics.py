@@ -73,7 +73,7 @@ class LSTM(nn.Module):
 
 	def forward(self, x_packed, **kwargs):
 		x_packed = nn.utils.rnn.PackedSequence(self.in_dropout_f(x_packed.data), x_packed.batch_sizes, x_packed.sorted_indices, x_packed.unsorted_indices)
-		x_packed, hidden = self.rnn(x_packed)
+		x_packed, hidden = self.rnn(x_packed, **kwargs)
 		x_packed = nn.utils.rnn.PackedSequence(self.out_dropout_f(x_packed.data), x_packed.batch_sizes, x_packed.sorted_indices, x_packed.unsorted_indices)
 		return x_packed
 
@@ -138,9 +138,11 @@ class GRU(nn.Module):
 		txt += f'({len(self):,}[p])'
 		return txt
 
-	def forward(self, x_packed, **kwargs):
+	def forward(self, x_packed,
+		h0=None,
+		**kwargs):
 		x_packed = nn.utils.rnn.PackedSequence(self.in_dropout_f(x_packed.data), x_packed.batch_sizes, x_packed.sorted_indices, x_packed.unsorted_indices)
-		x_packed, hidden = self.rnn(x_packed)
+		x_packed, hidden = self.rnn(x_packed, h0)
 		x_packed = nn.utils.rnn.PackedSequence(self.out_dropout_f(x_packed.data), x_packed.batch_sizes, x_packed.sorted_indices, x_packed.unsorted_indices)
 		return x_packed
 
@@ -202,7 +204,9 @@ class MLRNN(nn.Module):
 	def get_output_dims(self):
 		return self.output_dims
 
-	def forward(self, x, onehot, **kwargs):
+	def forward(self, x, onehot,
+		h0=None,
+		**kwargs):
 		'''
 		Parameters
 		----------
@@ -224,7 +228,7 @@ class MLRNN(nn.Module):
 		lengths = lengths.detach().to('cpu') # lengths needs to be in cpu, is there a fix to this slow operation?
 		for k,rnn in enumerate(self.rnns):
 			x_packed = nn.utils.rnn.pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False)
-			x_packed = rnn(x_packed)
+			x_packed = rnn(x_packed, h0)
 			x,_ = nn.utils.rnn.pad_packed_sequence(x_packed, batch_first=True, padding_value=0, total_length=self.max_curve_length) # argument is Sequence
 		return x, extra_info
 
