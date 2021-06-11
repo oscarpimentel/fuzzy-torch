@@ -9,6 +9,8 @@ from . import non_linear
 from . import utils
 from fuzzytools import strings as strings
 
+DEFAULT_ACTIVATION = C_.DEFAULT_ACTIVATION
+
 ###################################################################################################################################################
 
 class DummyModule(nn.Module):
@@ -167,7 +169,7 @@ class Linear(nn.Module):
 
 class MLP(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list,
-		activation=C_.DEFAULT_ACTIVATION,
+		activation=DEFAULT_ACTIVATION,
 		in_dropout=0.0,
 		out_dropout=0.0,
 		bias=True,
