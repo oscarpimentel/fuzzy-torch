@@ -196,16 +196,15 @@ class MLP(nn.Module):
 			activations[-1] = self.last_activation
 
 		self.fcs = nn.ModuleList()
-		for k in range(len(self.embd_dims_list)-1):
-			input_dims_ = self.embd_dims_list[k]
-			output_dims_ = self.embd_dims_list[k+1]
-			fc_kwargs = {
-				'activation':activations[k],
-				'in_dropout':self.in_dropout if k==0 else self.dropout,
-				'out_dropout':self.out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
-				'bias':self.bias,
-			}
-			self.fcs.append(Linear(input_dims_, output_dims_, **fc_kwargs))
+		for k in range(0, len(self.embd_dims_list)-1):
+			_input_dims = self.embd_dims_list[k]
+			_output_dims = self.embd_dims_list[k+1]
+			self.fcs.append(Linear(_input_dims, _output_dims,
+				activation=activations[k],
+				in_dropout=self.in_dropout if k==0 else self.dropout,
+				out_dropout=self.out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
+				bias=self.bias,
+				))
 		self.reset_parameters()
 
 	def reset_parameters(self):
@@ -220,10 +219,9 @@ class MLP(nn.Module):
 
 	def forward(self, x):
 		'''
-		x: (b,...,t)
+		x: (b,...,f)
 		'''
 		assert self.input_dims==x.shape[-1]
-
 		for fc in self.fcs:
 			x = fc(x)
 		return x

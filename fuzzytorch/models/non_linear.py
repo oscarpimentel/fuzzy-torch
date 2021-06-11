@@ -2,10 +2,10 @@ from __future__ import print_function
 from __future__ import division
 from . import C_
 
-import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
 ###################################################################################################################################################
 
@@ -19,21 +19,20 @@ TORCH_ACT_DICT = {
 	'selu':'SELU',
 }
 
-### functions
+def f_linear(x, dim:int):
+	return x
+
+def f_sigmoid(x, dim:int):
+	return torch.sigmoid(x)
+
+def f_tanh(x, dim:int):
+	return torch.tanh(x)
+
 def f_relu(x, dim:int):
 	return F.relu(x)
 
 def f_elu(x, dim:int):
 	return F.elu(x)
-
-def f_linear(x, dim:int):
-	return x
-
-def f_tanh(x, dim:int):
-	return torch.tanh(x)
-
-def f_sigmoid(x, dim:int):
-	return torch.sigmoid(x)
 
 def get_activation(activation:str):
 	if activation=='linear':
@@ -48,7 +47,7 @@ def get_activation(activation:str):
 		return f_elu
 	if activation=='softmax':
 		return F.softmax
-	raise Exception(f'the activation function {activation} doesnt exists')
+	raise Exception(f'no valid activation={activation}')
 
 def get_xavier_gain(activation_name, param=None):
 	#assert activation in TORCH_ACT_DICT.keys()

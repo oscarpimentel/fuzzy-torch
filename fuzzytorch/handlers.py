@@ -181,6 +181,7 @@ class ModelTrainHandler(object):
 		training_kwargs:dict={},
 		always_save=False,
 		delete_filedirs=True,
+		train_dataset_method_call=None,
 		**kwargs):
 		eval_set_names = list(eval_loaders.keys())
 		assert 'val' in eval_set_names
@@ -212,6 +213,8 @@ class ModelTrainHandler(object):
 					#print('start')
 					self.model.train() # ensure train mode!
 					#print('start2')
+					if not train_dataset_method_call is None:
+						getattr(train_loader.dataset, train_dataset_method_call)()
 					for ki,in_tdict in enumerate(train_loader): # batches loop - k
 						losses_text_list = []
 						for kt,lmonitor in enumerate(self.lmonitors): # along train lmonitors

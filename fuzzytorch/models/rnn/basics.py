@@ -71,11 +71,15 @@ class LSTM(nn.Module):
 		txt += f'({len(self):,}[p])'
 		return txt
 
-	def forward(self, x_packed, **kwargs):
+	def forward(self, x_packed,
+		hc0=None,
+		**kwargs):
 		x_packed = nn.utils.rnn.PackedSequence(self.in_dropout_f(x_packed.data), x_packed.batch_sizes, x_packed.sorted_indices, x_packed.unsorted_indices)
-		x_packed, hidden = self.rnn(x_packed, **kwargs)
+		x_packed, hidden = self.rnn(x_packed, hc0)
 		x_packed = nn.utils.rnn.PackedSequence(self.out_dropout_f(x_packed.data), x_packed.batch_sizes, x_packed.sorted_indices, x_packed.unsorted_indices)
 		return x_packed
+
+###################################################################################################################################################
 
 class GRU(nn.Module):
 	def __init__(self, input_dims, output_dims,
@@ -205,7 +209,6 @@ class MLRNN(nn.Module):
 		return self.output_dims
 
 	def forward(self, x, onehot,
-		h0=None,
 		**kwargs):
 		'''
 		Parameters
@@ -228,7 +231,7 @@ class MLRNN(nn.Module):
 		lengths = lengths.detach().to('cpu') # lengths needs to be in cpu, is there a fix to this slow operation?
 		for k,rnn in enumerate(self.rnns):
 			x_packed = nn.utils.rnn.pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False)
-			x_packed = rnn(x_packed, h0)
+			x_packed = rnn(x_packed, **kwargs)
 			x,_ = nn.utils.rnn.pad_packed_sequence(x_packed, batch_first=True, padding_value=0, total_length=self.max_curve_length) # argument is Sequence
 		return x, extra_info
 
@@ -241,6 +244,8 @@ class MLRNN(nn.Module):
 			resume += f'  ({k}) - {str(rnn)}\n'
 		txt = f'MLRNN(\n{resume})({len(self):,}[p])'
 		return txt
+
+###################################################################################################################################################
 
 class MLGRU(MLRNN):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list,
@@ -261,6 +266,8 @@ class MLGRU(MLRNN):
 			bias,
 			bidirectional,
 			)
+
+###################################################################################################################################################
 
 class MLLSTM(MLRNN):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list,
