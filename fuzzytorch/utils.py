@@ -64,7 +64,6 @@ def print_tdict(d):
 			return ''
 	print(get_tdict_repr(d))
 
-'''
 def create_d(links):
 	#print(links)
 	tree = {}
@@ -109,7 +108,6 @@ def minibatch_dict_collate(batch_dict_list):
 	new_d = torch.utils.data._utils.collate.default_collate(dict_list)
 	#print_tdict(new_d)
 	return new_d
-'''
 
 ###################################################################################################################################################
 
