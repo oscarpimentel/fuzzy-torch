@@ -349,7 +349,7 @@ class ModelTrainHandler(object):
 			#lmonitor.history_dict = loaded_dic['lmonitors'][lmonitor.name]
 			pass
 			
-		return True
+		return self.model
 
 
 '''	def evaluate_in_set(self, set_name:str, set_loader, training_kwargs:dict,

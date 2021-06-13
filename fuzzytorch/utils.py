@@ -46,7 +46,7 @@ def get_model_name(model_name_dict):
 
 def nested_tdict_to_device(d, device):
 	if isinstance(d, dict):
-		return {k:tdict_to_device(d[k], device) for k in d.keys()}
+		return {k:nested_tdict_to_device(d[k], device) for k in d.keys()}
 	elif isinstance(d, torch.Tensor):
 		return d if d.device==device else d.to(device)
 	else:
@@ -121,7 +121,7 @@ class TDictHolder():
 	def to(self, device,
 		add_dummy_dim=False,
 		):
-		d = tdict_to_device(self.d, device)
+		d = nested_tdict_to_device(self.d, device)
 		return torch.utils.data._utils.collate.default_collate([d]) if add_dummy_dim else d
 
 	def __getitem__(self, key):
