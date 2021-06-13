@@ -9,7 +9,7 @@ from . import non_linear
 from . import utils
 from fuzzytools import strings as strings
 
-DEFAULT_ACTIVATION = C_.DEFAULT_ACTIVATION
+DEFAULT_NON_LINEAR_ACTIVATION = C_.DEFAULT_NON_LINEAR_ACTIVATION
 
 ###################################################################################################################################################
 
@@ -60,7 +60,7 @@ class ResidualBlockHandler(nn.Module):
 		if hasattr(self.norm, 'reset_parameters'):
 			self.norm.reset_parameters()
 	
-	def norm_x(x,
+	def norm_x(self, x,
 		norm_args=[],
 		norm_kwargs={},
 		):
@@ -75,10 +75,10 @@ class ResidualBlockHandler(nn.Module):
 		norm_kwargs={},
 		f_returns_tuple=False,
 		):
-		fx_args = self.f(self.norm_x(x, norm_args, norm_kwargs), *f_args, **f_kwargs) if self.norm_mode=='pre_norm' else self.f(x, *f_args, **f_kwargs)
+		fx_args = self.f(self.norm_x(x, norm_args=norm_args, norm_kwargs=norm_kwargs), *f_args, **f_kwargs) if self.norm_mode=='pre_norm' else self.f(x, *f_args, **f_kwargs)
 		fx = fx_args[0] if f_returns_tuple else fx_args
 		new_x = x+self.residual_dropout_f(fx) # x+f(x)
-		new_x = self.norm_x(x, norm_args, norm_kwargs) if self.norm_mode=='post_norm' else new_x
+		new_x = self.norm_x(x, norm_args=norm_args, norm_kwargs=norm_kwargs) if self.norm_mode=='post_norm' else new_x
 		new_x = self.activation_f(new_x, dim=-1)
 		assert x.shape==new_x.shape
 		if f_returns_tuple:
@@ -169,12 +169,12 @@ class Linear(nn.Module):
 
 class MLP(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list,
-		activation=DEFAULT_ACTIVATION,
+		activation=DEFAULT_NON_LINEAR_ACTIVATION,
 		in_dropout=0.0,
 		out_dropout=0.0,
 		bias=True,
 		dropout=0.0,
-		last_activation=C_.DEFAULT_LAST_ACTIVATION,
+		last_activation='linear',
 		**kwargs):
 		super().__init__()
 		### CHECKS

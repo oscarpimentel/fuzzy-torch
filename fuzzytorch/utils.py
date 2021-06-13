@@ -4,34 +4,47 @@ from . import C_
 
 import torch
 import fuzzytools.strings as strings
-from torch.utils.data._utils.collate import default_collate
+import numpy as np
+
+NUMPY_TO_TORCH_DTYPE_DICT = {
+	np.bool       : torch.bool,
+	np.uint8      : torch.uint8,
+	np.int8       : torch.int8,
+	np.int16      : torch.int16,
+	np.int32      : torch.int32,
+	np.int64      : torch.int64,
+	np.float16    : torch.float16,
+	np.float32    : torch.float32,
+	np.float64    : torch.float64,
+	np.complex64  : torch.complex64,
+	np.complex128 : torch.complex128
+	}
+TORCH_TO_NUMPY_DTYPE_DICT = {
+	torch.bool       : np.bool,
+	torch.uint8      : np.uint8,
+	torch.int8       : np.int8,
+	torch.int16      : np.int16,
+	torch.int32      : np.int32,
+	torch.int64      : np.int64,
+	torch.float16    : np.float16,
+	torch.float32    : np.float32,
+	torch.float64    : np.float64,
+	torch.complex64  : np.complex64,
+	torch.complex128 : np.complex128
+	}
 
 ###################################################################################################################################################
 
 def get_numpy_dtype(torch_dtype):
-	return C_.torch_to_numpy_dtype_dict[torch_dtype]
+	return TORCH_TO_NUMPY_DTYPE_DICT[torch_dtype]
 
 def tensor_to_numpy(x):
 	return x.detach().cpu().numpy()
 
-###################################################################################################################################################
-
-def iter_paths(d):
-	def iter1(d, path):
-		paths = []
-		for k, v in d.items():
-			if isinstance(v, dict):
-				paths += iter1(v, path + [k])
-			paths.append((path + [k], v))
-		return paths
-	return iter1(d, [])
-
-###################################################################################################################################################
-
 def get_model_name(model_name_dict):
 	return strings.get_string_from_dict(model_name_dict)
 
-def tdict_to_device(d, device):
+def nested_tdict_to_device(d, device):
 	if isinstance(d, dict):
 		return {k:tdict_to_device(d[k], device) for k in d.keys()}
 	elif isinstance(d, torch.Tensor):
@@ -51,6 +64,7 @@ def print_tdict(d):
 			return ''
 	print(get_tdict_repr(d))
 
+'''
 def create_d(links):
 	#print(links)
 	tree = {}
@@ -68,6 +82,16 @@ def nested_set(dic, keys, value):
         dic = dic.setdefault(key, {})
     dic[keys[-1]] = value
 
+def iter_paths(d):
+	def iter1(d, path):
+		paths = []
+		for k, v in d.items():
+			if isinstance(v, dict):
+				paths += iter1(v, path + [k])
+			paths.append((path + [k], v))
+		return paths
+	return iter1(d, [])
+
 def minibatch_dict_collate(batch_dict_list):
 	dict_list = []
 	for minibatch_dict_list in batch_dict_list:
@@ -82,9 +106,10 @@ def minibatch_dict_collate(batch_dict_list):
 			#print_tdict(d)
 			dict_list.append(d)
 
-	new_d = default_collate(dict_list)
+	new_d = torch.utils.data._utils.collate.default_collate(dict_list)
 	#print_tdict(new_d)
 	return new_d
+'''
 
 ###################################################################################################################################################
 
@@ -97,7 +122,7 @@ class TDictHolder():
 		add_dummy_dim=False,
 		):
 		d = tdict_to_device(self.d, device)
-		return default_collate([d]) if add_dummy_dim else d
+		return torch.utils.data._utils.collate.default_collate([d]) if add_dummy_dim else d
 
 	def __getitem__(self, key):
 		return self.d[key]

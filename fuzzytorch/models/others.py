@@ -208,6 +208,7 @@ class TimeFILM(nn.Module):
 		activation='relu',
 		residual_dropout=0,
 		mod_dropout=0,
+		uses_norm=False,
 		**kwargs):
 		super().__init__()
 		### CHECKS
@@ -226,6 +227,7 @@ class TimeFILM(nn.Module):
 		self.activation = activation
 		self.residual_dropout = residual_dropout
 		self.mod_dropout = mod_dropout
+		self.uses_norm = uses_norm
 		self.reset()
 
 	def reset(self):
@@ -234,11 +236,10 @@ class TimeFILM(nn.Module):
 			#'bias':self.bias,
 			}
 		assert self.input_dims>0
-		te_kwargs = {
-			'time_noise_window':self.time_noise_window,
-			'mod_dropout':self.mod_dropout,
-		}
-		self.temporal_encoder = TemporalEncoder(self.te_features, self.max_te_period, **te_kwargs)
+		self.temporal_encoder = TemporalEncoder(self.te_features, self.max_te_period,
+			time_noise_window=self.time_noise_window,
+			mod_dropout=self.mod_dropout,
+			)
 		#self.te_mod_beta = TemporalEncoder(self.te_features, self.max_te_period)
 		print('temporal_encoder:',self.temporal_encoder)
 
@@ -262,9 +263,8 @@ class TimeFILM(nn.Module):
 		self.cnn_pad = nn.ConstantPad1d([self.kernel_size-1, 0], 0)
 		self.cnn = nn.Conv1d(self.fourier_dims, self.input_dims, kernel_size=self.kernel_size, padding=0, bias=True)
 
-		#self.gamma_beta_mlp = MLP(self.mod_input_dims, self.mod_output_dims*2, [self.mod_input_dims], activation='relu')
-		#self.bn_fourier = MaskedBatchNorm1d(self.fourier_dims, affine=False)# if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
-		#self.bn = MaskedBatchNorm1d(self.input_dims)# if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims)
+		# if self.uses_norm:
+		self.norm = torch.nn.LayerNorm([self.input_dims])
 
 		self.activation_f = non_linear.get_activation(self.activation)
 		self.residual_dropout_f = nn.Dropout(self.residual_dropout)
@@ -299,6 +299,9 @@ class TimeFILM(nn.Module):
 		# x_mod = x*(gamma+1)+beta
 		# x_mod = x+beta
 		# x_mod = self.x_proj(x)*gamma+beta
+
+		if self.uses_norm:
+			x_mod = self.norm(x_mod)
 
 		x_mod = x_mod.permute(0,2,1)
 		x_mod = self.cnn(self.cnn_pad(x_mod))

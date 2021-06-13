@@ -49,17 +49,19 @@ class LossOptimizer:
 
 	def __len__(self):
 		return sum(p.numel() for p in self.get_model_parameters() if p.requires_grad)
-
-	# def train(self):
-		# self.to_optimize_model.train()
-
-	# def eval(self):
-		# self.to_optimize_model.eval()
 		
 	def get_device(self):
 		return next(self.get_model_parameters()).device
 
 	def zero_grad(self,
+		set_to_none=False,
+		):
+		return self.zero_grad_model(
+		# return self.zero_grad_grads(
+			set_to_none=set_to_none,
+			)
+
+	def zero_grad_grads(self,
 		set_to_none=False,
 		):
 		for group in self.optimizer.param_groups:
@@ -74,12 +76,13 @@ class LossOptimizer:
 							p.grad.requires_grad_(False)
 						p.grad.zero_()
 
-	# def apply_clip_grad(self):
-		# if not self.clip_grad is None:
-			# torch.nn.utils.clip_grad_norm_(self.get_model_parameters(), self.clip_grad)
+	def zero_grad_model(self,
+		set_to_none=False,
+		):
+		for param in self.get_model_parameters():
+			param.grad = None if set_to_none else 0
 
 	def step(self):
-		# self.apply_clip_grad()
 		self.optimizer.step()
 
 	def get_opt_kwargs(self):

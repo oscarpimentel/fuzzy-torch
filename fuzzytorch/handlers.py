@@ -15,7 +15,7 @@ from fuzzytools import prints
 import warnings
 from . import monitors as mon
 from . import exceptions as ex
-from .utils import get_model_name, TDictHolder, minibatch_dict_collate, print_tdict
+from .utils import get_model_name, TDictHolder, print_tdict
 from .models.utils import count_parameters
 from.files import FTFile
 import cProfile

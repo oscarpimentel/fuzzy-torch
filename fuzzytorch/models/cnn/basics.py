@@ -12,6 +12,18 @@ from torch.nn.init import xavier_uniform_, constant_, eye_
 from fuzzytools import strings as strings
 from fuzzytools import lists as lists
 
+DEFAULT_PADDING_MODE = 'same'
+DEFAULT_CNN_KWARGS = {
+	'kernel_size':3,
+	'stride':1,
+	'dilation':1,
+	}
+DEFAULT_POOL_KWARGS = {
+	'kernel_size':2,
+	'stride':2,
+	'dilation':1,
+	}
+
 ###################################################################################################################################################
 
 class ConvLinear(nn.Module):

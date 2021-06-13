@@ -19,6 +19,11 @@ from ..others import TimeFILM
 from .. import seq_utils as seq_utils
 import numpy as np
 
+DEFAULT_NON_LINEAR_ACTIVATION = C_.DEFAULT_NON_LINEAR_ACTIVATION
+NORM_MODE = 'none' # none pre_norm post_norm
+MLP_K = 2
+NUM_HEADS = 4
+
 ###################################################################################################################################################
 
 class SelfAttnWrapper(nn.Module):
@@ -64,7 +69,7 @@ class SelfAttnWrapper(nn.Module):
 class SelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int,
 		max_curve_length=None,
-		num_heads=2,
+		num_heads=NUM_HEADS,
 		activation='linear',
 		in_dropout=0.0,
 		out_dropout=0.0,
@@ -73,8 +78,8 @@ class SelfAttn(nn.Module):
 		residual_dropout=0.0,
 		bias=True,
 		uses_length_wise_batchnorm=True, # fixme
-		mlp_k=None,
-		norm_mode='none',
+		mlp_k=MLP_K,
+		norm_mode=NORM_MODE,
 		**kwargs):
 		super().__init__()
 		### CHECKS
@@ -98,11 +103,6 @@ class SelfAttn(nn.Module):
 		self.bias = bias
 		self.uses_length_wise_batchnorm = uses_length_wise_batchnorm
 		self.mlp_k = mlp_k
-
-
-		self.mlp_k = 2
-
-
 		self.norm_mode = norm_mode
 		self.reset()
 
@@ -112,37 +112,36 @@ class SelfAttn(nn.Module):
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
 		self.activation_f = non_linear.get_activation(self.activation)
 		self.bypass_mlp = self.mlp_k is None
-		### ATTN
-		mhattn_kwargs = {
-			'dropout':self.attn_dropout,
-			'bias':self.bias,
-			'add_bias_kv':False,
-			'add_zero_attn':False,
-			'kdim':None,
-			'vdim':None,
-		}
-		self.self_mh_attn = SelfAttnWrapper(MultiheadAttention(self.input_dims, self.num_heads, **mhattn_kwargs))
+
+		### attn
+		self.self_mh_attn = SelfAttnWrapper(MultiheadAttention(self.input_dims, self.num_heads,
+			dropout=self.attn_dropout,
+			bias=self.bias,
+			add_bias_kv=False,
+			add_zero_attn=False,
+			kdim=None,
+			vdim=None,
+			))
 		self.attn_res_block = ResidualBlockHandler(self.self_mh_attn,
-			MaskedBatchNorm1d(self.input_dims) if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims),
+			torch.nn.LayerNorm([self.input_dims]),
 			norm_mode=self.norm_mode,
 			residual_dropout=self.residual_dropout,
 			)
 
-		### MLP
+		### mlp
 		if self.bypass_mlp:
 			pass
 		else:
-			mlp_kwargs = {
-				'activation':'relu', # transformer
-				'in_dropout':0.,
-				'out_dropout':0.,
-				'bias':self.bias,
-				'dropout':self.mlp_dropout,
-				'last_activation':'linear', # transformer
-				}
-			self.mlp = MLP(self.input_dims, self.output_dims, [int(self.input_dims*self.mlp_k)]*1, **mlp_kwargs)
+			self.mlp = MLP(self.input_dims, self.output_dims, [int(self.input_dims*self.mlp_k)]*1,
+				activation='relu', # transformer
+				in_dropout=0.,
+				out_dropout=0.,
+				bias=self.bias,
+				dropout=self.mlp_dropout,
+				last_activation='linear', # transformer
+				)
 			self.mlp_res_block = ResidualBlockHandler(self.mlp,
-				MaskedBatchNorm1d(self.input_dims) if self.uses_length_wise_batchnorm else LayerNorm(self.input_dims),
+				torch.nn.LayerNorm([self.input_dims]),
 				norm_mode=self.norm_mode,
 				residual_dropout=self.residual_dropout,
 				)
@@ -214,24 +213,13 @@ class SelfAttn(nn.Module):
 		x, scores = self.attn_res_block(x, f_returns_tuple=True, f_kwargs=mhattn_kwargs)
 		scores = scores.detach()
 
-		# f_x = self.attn_bn(x, onehot) if self.norm_mode=='pre' else x # PRE NORM
-		# f_x, scores = self.self_mh_attn(f_x, attn_kwargs=mhattn_kwargs)
-		# scores = scores.detach()
-		# x = self.res1_dropout_f(values)+f_x # x=x+f(x)
-		# x = x.permute(1,0,2)
-		# x = self.attn_bn(x, onehot) if self.norm_mode=='post' else x # POST NORM
-
 		### MLP
 		if self.bypass_mlp:
 			pass
 		else:
 			x = self.mlp_res_block(x)
-			# f_x = self.mlp_bn(x, onehot) if self.norm_mode=='pre' else x # PRE NORM
-			# f_x = self.mlp(f_x)
-			# x = self.res2_dropout_f(x)+f_x # x=x+f(x)
-			# x = self.mlp_bn(x, onehot) if self.norm_mode=='post' else x # POST NORM
 
-		### ACTIVATION
+		### activation + dropout
 		# x = self.activation_f(x, dim=-1)
 		x = self.out_dropout_f(x)
 		
@@ -250,9 +238,9 @@ class SelfAttn(nn.Module):
 class MLSelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list,
 		max_curve_length=None,
-		num_heads=2,
-		activation=C_.DEFAULT_ACTIVATION,
-		last_activation=C_.DEFAULT_LAST_ACTIVATION,
+		num_heads=NUM_HEADS,
+		activation=DEFAULT_NON_LINEAR_ACTIVATION,
+		last_activation='linear',
 		in_dropout=0.0,
 		dropout=0.0,
 		out_dropout=0.0,
@@ -365,7 +353,7 @@ class MLSelfAttn(nn.Module):
 class TimeSelfAttn(SelfAttn):
 	def __init__(self, input_dims:int, output_dims:int,
 		max_curve_length=None,
-		num_heads=2,
+		num_heads=NUM_HEADS,
 		activation='linear',
 		in_dropout=0.0,
 		out_dropout=0.0,
@@ -412,9 +400,9 @@ class TimeSelfAttn(SelfAttn):
 class MLTimeSelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, te_features, max_te_period,
 		max_curve_length=None,
-		num_heads=2,
-		activation=C_.DEFAULT_ACTIVATION,
-		last_activation=C_.DEFAULT_LAST_ACTIVATION,
+		num_heads=NUM_HEADS,
+		activation=DEFAULT_NON_LINEAR_ACTIVATION,
+		last_activation='linear',
 		in_dropout=0.0,
 		dropout=0.0,
 		out_dropout=0.0,
@@ -478,19 +466,18 @@ class MLTimeSelfAttn(nn.Module):
 		for k in range(0, len(self.embd_dims_list)-1):
 			input_dims_ = self.embd_dims_list[k]
 			output_dims_ = self.embd_dims_list[k+1]
-			attn_kwargs = {
-				'max_curve_length':self.max_curve_length,
-				'num_heads':self.num_heads,
-				'activation':activations[k],
-				'in_dropout':self.in_dropout if k==0 else self.dropout,
-				'out_dropout':self.out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
-				'attn_dropout':self.attn_dropout,
-				'mlp_dropout':self.mlp_dropout,
-				'residual_dropout':self.residual_dropout,
-				'bias':self.bias,
-				'uses_length_wise_batchnorm':self.uses_length_wise_batchnorm,
-				}
-			self_attn = TimeSelfAttn(input_dims_, output_dims_, **attn_kwargs)
+			self_attn = TimeSelfAttn(input_dims_, output_dims_,
+				max_curve_length=self.max_curve_length,
+				num_heads=self.num_heads,
+				activation=activations[k],
+				in_dropout=self.in_dropout if k==0 else self.dropout,
+				out_dropout=self.out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
+				attn_dropout=self.attn_dropout,
+				mlp_dropout=self.mlp_dropout,
+				residual_dropout=self.residual_dropout,
+				bias=self.bias,
+				uses_length_wise_batchnorm=self.uses_length_wise_batchnorm,
+				)
 			self.self_attns += [self_attn]
 
 		self.reset()
