@@ -3,7 +3,73 @@ from __future__ import division
 from . import C_
 
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
+from .basics import MLP, Linear
+from fuzzytools import strings as strings
+from . import utils
+
+###################################################################################################################################################
+
+class LinearSEFT(nn.Module):
+	def __init__(self, input_dims,
+		in_dropout=0.,
+		out_dropout=0.,
+		dummy=False,
+		**kwargs):
+		super().__init__()
+		### CHECKS
+		assert in_dropout>=0 and in_dropout<=1
+		assert out_dropout>=0 and out_dropout<=1
+
+		self.input_dims = input_dims
+		self.in_dropout = in_dropout
+		self.out_dropout = out_dropout
+		self.dummy = dummy
+		self.reset()
+
+	def reset(self):
+		self.h = Linear(self.input_dims, self.input_dims,
+			in_dropout=self.in_dropout,
+			activation='linear',
+			bias=True,
+			)
+		self.g = Linear(self.input_dims, self.input_dims,
+			out_dropout=self.out_dropout,
+			activation='linear',
+			bias=False,
+			)
+
+	def __len__(self):
+		return utils.count_parameters(self)
+
+	def extra_repr(self):
+		txt = strings.get_string_from_dict({
+			'input_dims':self.input_dims,
+			'in_dropout':self.in_dropout,
+			'out_dropout':self.out_dropout,
+			'dummy':self.dummy,
+			}, ', ', '=')
+		return txt
+
+	def __repr__(self):
+		txt = f'LinearSEFT({self.extra_repr()})'
+		txt += f'({len(self):,}[p])'
+		return txt
+
+	def forward(self, x, onehot,
+		**kwargs):
+		# x (b,t,f)
+		# onehot (b,t)
+		assert len(x.shape)==3
+		assert len(onehot.shape)==2
+
+		# encz_bdict[f'encz'] = seq_utils.seq_last_element(encz, onehot) # (b,t,f) > (b,f)
+		# encz_bdict[f'encz'] = seq_utils.seq_avg_pooling(encz, onehot) # (b,t,f) > (b,f)
+		hx = seq_avg_pooling(torch.relu(self.h(x)), onehot) # (b,t,f) > (b,f)
+		gx = self.g(hx) # (b,f) > (b,f)
+		return gx
 
 ###################################################################################################################################################
 
@@ -148,7 +214,6 @@ def seq_last_element(x, onehot,
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
 	x = seq_clean(x, onehot, empty_seq_value) # important
 	x = seq_clean(x, new_onehot, 0) # important
-
 	indexs = torch.sum(onehot[...,None], dim=1)-1 # (b,t,1) > (b,1) # -1 because index is always 1 unit less than length
 	indexs = torch.clamp(indexs, 0, None) # forced -1 -> 0 to avoid errors of empty sequences!!
 	last_x = torch.gather(x, 1, indexs[:,:,None].expand(-1,-1,f)) # index (b,t,f) > (b,1,f)

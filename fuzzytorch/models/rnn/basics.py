@@ -150,6 +150,11 @@ class GRU(nn.Module):
 		x_packed = nn.utils.rnn.PackedSequence(self.out_dropout_f(x_packed.data), x_packed.batch_sizes, x_packed.sorted_indices, x_packed.unsorted_indices)
 		return x_packed
 
+	# def forward(self, x,
+	# 	h0=None,
+	# 	**kwargs):
+	# 	x, hidden = self.rnn(x, h0)
+	# 	return x
 
 ###################################################################################################################################################
 
@@ -228,12 +233,34 @@ class MLRNN(nn.Module):
 		self.max_curve_length = x.shape[1]
 		extra_info = {}
 		lengths = torch.clamp(onehot.sum(dim=-1), 1, None) # forced to avoid errors of empty bands sequences
-		lengths = lengths.detach().to('cpu') # lengths needs to be in cpu, is there a fix to this slow operation?
+		cpu_lengths = lengths.detach().to('cpu') # lengths needs to be in cpu, is there a fix to this slow operation?
 		for k,rnn in enumerate(self.rnns):
-			x_packed = nn.utils.rnn.pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False)
+			x_packed = nn.utils.rnn.pack_padded_sequence(x, cpu_lengths, batch_first=True, enforce_sorted=False)
 			x_packed = rnn(x_packed, **kwargs)
 			x,_ = nn.utils.rnn.pad_packed_sequence(x_packed, batch_first=True, padding_value=0, total_length=self.max_curve_length) # argument is Sequence
 		return x, extra_info
+
+	# def forward(self, x, onehot,
+	# 	**kwargs):
+	# 	'''
+	# 	Parameters
+	# 	----------
+	# 	x (b,t,f): input tensor.
+	# 	onehot (b,t)
+
+	# 	Return
+	# 	----------
+	# 	x_out: (b,t,h): output tensor.
+	# 	'''
+	# 	assert onehot.dtype==torch.bool
+	# 	assert len(onehot.shape)==2
+	# 	assert x.shape[:-1]==onehot.shape
+	# 	assert len(x.shape)==3
+
+	# 	extra_info = {}
+	# 	for k,rnn in enumerate(self.rnns):
+	# 		x = rnn(x, **kwargs)
+	# 	return x, extra_info
 
 	def __len__(self):
 		return utils.count_parameters(self)

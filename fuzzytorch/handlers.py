@@ -19,6 +19,26 @@ from .utils import get_model_name, TDictHolder, print_tdict
 from .models.utils import count_parameters
 from.files import FTFile
 import cProfile
+from timeit import default_timer as timer
+import torch.autograd.profiler as profiler
+
+def xxx(tdict, device,
+    chunk_dtype=torch.float32,
+    ):
+    chunk_d = {tdict[k].shape:{} for k in tdict.keys()}
+    for key in tdict.keys():
+        chunk_d[tdict[key].shape][key] = tdict[key]
+    d = {}
+    for shape in chunk_d.keys():
+        tensors = [chunk_d[shape][key] for key in chunk_d[shape].keys()]
+        # t = torch.cat(tensors, dim=0).to(device)
+        t = torch.zeros([len(tensors)]+list(shape), dtype=chunk_dtype)
+        for k in range(0, len(tensors)):
+            t[k] = tensors[k]
+        t = t.to(device)
+        for k,key in enumerate(chunk_d[shape].keys()):
+            d[key] = t[k].type(tdict[key].dtype)
+    return d
 
 ###################################################################################################################################################
 
@@ -54,6 +74,9 @@ class ModelTrainHandler(object):
 
 		self.device = 'cpu'
 		self.device_name = 'cpu'
+		self.reset_file()
+
+	def reset_file(self):
 		self.file = None
 
 	def get_model_name(self):
@@ -215,38 +238,40 @@ class ModelTrainHandler(object):
 					#print('start2')
 					if not train_dataset_method_call is None:
 						getattr(train_loader.dataset, train_dataset_method_call)()
-					for ki,in_tdict in enumerate(train_loader): # batches loop - k
+
+					in_tdicts = enumerate(train_loader)
+					for ki,in_tdict in in_tdicts: # batches loop - k
 						losses_text_list = []
+
 						for kt,lmonitor in enumerate(self.lmonitors): # along train lmonitors
 							lmonitor_cr = times.Cronometer()
 							#for lmonitor_aux in self.lmonitors: # freeze all other models except actual
 							#	lmonitor_aux.eval() # it's neccesary????
 							#lmonitor.train() # ensure train mode!
+
 							lmonitor.optimizer.zero_grad(set_to_none=True) # False True
 
 							#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
 							#print_tdict(in_tdict)
-							out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs) # Feed forward
+							in_tdict = xxx(in_tdict, self.device)
+							out_tdict = self.model(in_tdict, **training_kwargs) # Feed forward
+							# out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs) # Feed forward
 							#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
 							loss = lmonitor.loss(out_tdict, **training_kwargs)
 							loss.get_loss(get_tensor=True).backward() # gradient calculation
 							lmonitor.optimizer.step() # step gradient
 
-							with torch.no_grad():
-								### save loss to history & bar text
-								lmonitor.add_loss_history_k(loss, lmonitor_cr.dt())
-								losses_text_list += [f'[{lmonitor.name}] b={len(loss):,} - _loss={str(loss)} {lmonitor_cr}']
-								lmonitor.k_update() # update k
-
-						if ki>0:
-							#break # debug
+							### save loss to history & bar text
+							lmonitor.add_loss_history_k(loss, lmonitor_cr.dt())
+							losses_text_list += [f'[{lmonitor.name}] b={len(loss):,} - _loss={str(loss)} {lmonitor_cr}']
+							lmonitor.k_update() # update k
 							pass
-						
+
 						### TEXT
 						backprop_text = f'id={self.id} - _epoch={epoch:,}/{self.epochs_max:,}({ki:,}/{ks_epochs:,})'
 						bar_text_dic['train'] = backprop_text + ''.join(losses_text_list)
 						self.update_bar(training_bar, bar_text_dic)
-					
+
 					### save opt to history
 					for lmonitor in self.lmonitors:
 						lmonitor.add_opt_history_epoch()
@@ -296,7 +321,10 @@ class ModelTrainHandler(object):
 				self.escape_training(training_bar, '*** ctrl+c ***')
 
 		#p.disable(); p.dump_stats('prof.prof')
+		# print(prof.key_averages(group_by_stack_n=5).table(sort_by='self_cpu_time_total', row_limit=5))
+		
 		self.file.save()
+		self.reset_file()
 		training_bar.done()
 		print(strings.get_bar())
 		print('End of training!!!')

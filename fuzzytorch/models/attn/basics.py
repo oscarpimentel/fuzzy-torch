@@ -21,7 +21,7 @@ import numpy as np
 
 DEFAULT_NON_LINEAR_ACTIVATION = C_.DEFAULT_NON_LINEAR_ACTIVATION
 NORM_MODE = 'none' # none pre_norm post_norm
-MLP_K = 2
+MLP_K = 1
 NUM_HEADS = 4
 
 ###################################################################################################################################################

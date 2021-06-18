@@ -74,7 +74,6 @@ class TemporalEncoder(nn.Module):
 		mod_dropout=0, # dec
 		**kwargs):
 		super().__init__()
-
 		### CHECKS
 		assert te_features>0
 		assert te_features%2==0
