@@ -8,35 +8,32 @@ import torch
 
 ###################################################################################################################################################
 
+def _check_model(to_optimize_models):
+	for m in to_optimize_models:
+		assert isinstance(m, nn.Module)
+
 class LossOptimizer:
-	def __init__(self, to_optimize_model, opt_class, opt_kwargs_f,
+	def __init__(self, to_optimize_models, opt_class, opt_kwargs_f,
 		clip_grad=None,
-		model_get_parameters_f=None,
 		**kwargs):
-		assert isinstance(to_optimize_model, nn.Module)
-		self.to_optimize_model = to_optimize_model
+		self.to_optimize_models = to_optimize_models if isinstance(to_optimize_models, list) else [to_optimize_models]
 		self.opt_class = opt_class
 		self.opt_kwargs_f = opt_kwargs_f
 		self.clip_grad = clip_grad
-		self.model_get_parameters_f = model_get_parameters_f
 		self.reset()
 
 	def reset(self):
 		self.epoch_counter = 0
+		_check_model(self.to_optimize_models)
 		self.calcule_opt_kwargs()
-		self.to_optimize_model = self.to_optimize_model if self.model_get_parameters_f is None else getattr(self.to_optimize_model, self.model_get_parameters_f)()
 		self.generate_mounted_optimizer()
 		self.set_gradient_clip_hooks()
 
 	def get_model_parameters(self):
-		return self.to_optimize_model.parameters() # iterable that exahuste
-
-	def set_gradient_clip_hooks(self):
-		if not self.clip_grad is None:
-			assert self.clip_grad>0
-			for p in self.get_model_parameters():
-				if p.requires_grad:
-					p.register_hook(lambda grad:torch.clamp(grad, -self.clip_grad, self.clip_grad))
+		model_parameters = []
+		for m in self.to_optimize_models:
+			model_parameters += list(m.parameters()) # .parameters() is an iterable that exahuste
+		return model_parameters
 
 	def calcule_opt_kwargs(self):
 		self.opt_kwargs = {}
@@ -47,19 +44,33 @@ class LossOptimizer:
 	def generate_mounted_optimizer(self):
 		self.optimizer = self.opt_class(self.get_model_parameters(), **self.opt_kwargs)
 
+	def set_gradient_clip_hooks(self):
+		if not self.clip_grad is None:
+			assert self.clip_grad>0
+			for p in self.get_model_parameters():
+				if p.requires_grad:
+					p.register_hook(lambda grad:torch.clamp(grad, -self.clip_grad, self.clip_grad))
+
 	def __len__(self):
 		return sum(p.numel() for p in self.get_model_parameters() if p.requires_grad)
 		
 	def get_device(self):
-		return next(self.get_model_parameters()).device
+		# device = next(self.get_model_parameters()).device
+		device = self.get_model_parameters()[0].device
+		return device
 
 	def zero_grad(self,
 		set_to_none=False,
+		reset_model_grad=True,
 		):
-		return self.zero_grad_model(
-		# return self.zero_grad_grads(
-			set_to_none=set_to_none,
-			)
+		if reset_model_grad:
+			self.zero_grad_model(
+				set_to_none=set_to_none,
+				)
+		else:
+			return self.zero_grad_grads(
+				set_to_none=set_to_none,
+				)
 
 	def zero_grad_grads(self,
 		set_to_none=False,
@@ -79,8 +90,8 @@ class LossOptimizer:
 	def zero_grad_model(self,
 		set_to_none=False,
 		):
-		for param in self.get_model_parameters():
-			param.grad = None if set_to_none else 0
+		for p in self.get_model_parameters():
+			p.grad = None if set_to_none else 0
 
 	def step(self):
 		self.optimizer.step()

@@ -206,6 +206,8 @@ class LossMonitor(object):
 
 	### file methods
 	def remove_filedir(self, filedir):
+		if filedir is None:
+			return
 		files.delete_filedir(filedir, verbose=0) # remove last best model
 
 	def check_save_condition(self, set_name):
@@ -221,10 +223,7 @@ class LossMonitor(object):
 
 		elif self.save_mode==C_.SM_ONLY_INF_LOSS:
 			loss_df_epoch = self.loss_df_epoch.get_df()
-			loss_evolution = loss_df_epoch['_loss'][loss_df_epoch['_set'].isin([set_name])].values
-			if len(loss_evolution)<=1:
-				return True # always save first and dont delete anything
-
+			loss_evolution = [np.inf]+[v for v in loss_df_epoch['_loss'][loss_df_epoch['_set'].isin([set_name])].values]
 			loss_history = loss_evolution[:-1] # history
 			actual_loss = loss_evolution[-1] # last one
 
@@ -237,11 +236,7 @@ class LossMonitor(object):
 
 		elif self.save_mode==C_.SM_ONLY_INF_METRIC:
 			metrics_df_epoch = self.metrics_df_epoch.get_df()
-			metric_evolution = metrics_df_epoch[self.target_metric_crit][metrics_df_epoch['_set'].isin([set_name])].values
-			#print(metrics_df_epoch, metric_evolution)
-			if len(metric_evolution)<=1:
-				return True # always save first and dont delete anything
-
+			metric_evolution = [np.inf]+[v for v in metrics_df_epoch[self.target_metric_crit][metrics_df_epoch['_set'].isin([set_name])].values]
 			metric_history = metric_evolution[:-1] # history
 			actual_metric = metric_evolution[-1] # last one
 
@@ -254,10 +249,7 @@ class LossMonitor(object):
 
 		elif self.save_mode==C_.SM_ONLY_SUP_METRIC:
 			metrics_df_epoch = self.metrics_df_epoch.get_df()
-			metric_evolution = metrics_df_epoch[self.target_metric_crit][metrics_df_epoch['_set'].isin([set_name])].values
-			if len(metric_evolution)<=1:
-				return True # always save first and dont delete anything
-
+			metric_evolution = [-np.inf]+[v for v in metrics_df_epoch[self.target_metric_crit][metrics_df_epoch['_set'].isin([set_name])].values]
 			metric_history = metric_evolution[:-1] # history
 			actual_metric = metric_evolution[-1] # last one
 
