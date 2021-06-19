@@ -88,7 +88,7 @@ class LossMonitor(object):
 		dt=0,
 		):
 		if self.counter_k.check('k'):
-			assert isinstance(loss, ft_losses.LossResult)
+			assert isinstance(loss, ft_losses.BatchLoss)
 			d = loss.get_info()
 			#index = self.counter_k.get_global_count()
 			index = None
@@ -111,7 +111,7 @@ class LossMonitor(object):
 		set_name=None,
 		):
 		if self.counter_epoch.check('val_epoch'):
-			assert isinstance(loss, ft_losses.LossResult)
+			assert isinstance(loss, ft_losses.BatchLoss)
 			d = loss.get_info()
 			#index = self.counter_epoch.get_global_count()
 			index = None
@@ -129,7 +129,7 @@ class LossMonitor(object):
 			d = {}
 			for mn in metrics_dict.keys():
 				metric = metrics_dict[mn]
-				assert isinstance(metric, ft_metrics.MetricResult)
+				assert isinstance(metric, ft_metrics.BatchMetric)
 				d[mn] = metric.get_info()['_metric']
 			d.update({
 				'_dt':dt,

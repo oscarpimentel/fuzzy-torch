@@ -154,7 +154,9 @@ class ModelTrainHandler(object):
 					set_metrics = {metric.name:[] for metric in lmonitor.metrics}
 					for ki,in_tdict in enumerate(set_loader): # batches loop
 						#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
-						out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs)
+						in_tdict = xxx(in_tdict, self.device)
+						# in_tdict = TDictHolder(in_tdict).to(self.device)
+						out_tdict = self.model(in_tdict, **training_kwargs)
 						#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
 						loss_v = lmonitor.loss(out_tdict, **training_kwargs) # (b)
 						set_losses += [loss_v]
@@ -162,17 +164,14 @@ class ModelTrainHandler(object):
 							metric_v = metric(out_tdict, **training_kwargs) # (b)
 							set_metrics[metric.name] += [metric_v]
 
-					n = len(set_losses)
 					## SET LOSS TO HYSTORY
 					set_loss = sum(set_losses)
-					set_loss = set_loss/n if set_loss.reduction_mode=='mean' else set_loss
 					lmonitor.add_loss_history_epoch(set_loss, lmonitor_cr.dt(), set_name)
 					text += f'[{lmonitor.name}] _loss={str(set_loss)}'
 
 					### save metrics to history & bar text
 					for metric in lmonitor.metrics:
 						set_metric = sum(set_metrics[metric.name])
-						set_metric = set_metric/n if set_metric.reduction_mode=='mean' else set_metric
 						set_metrics[metric.name] = set_metric # replace
 						text += f' - {metric.name}={str(set_metric)}'
 
@@ -257,13 +256,13 @@ class ModelTrainHandler(object):
 							out_tdict = self.model(in_tdict, **training_kwargs) # Feed forward
 							# out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs) # Feed forward
 							#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
-							loss = lmonitor.loss(out_tdict, **training_kwargs)
-							loss.get_loss(get_tensor=True).backward() # gradient calculation
+							batch_loss = lmonitor.loss(out_tdict, **training_kwargs)
+							batch_loss.backward() # gradient calculation
 							lmonitor.optimizer.step() # step gradient
 
 							### save loss to history & bar text
-							lmonitor.add_loss_history_k(loss, lmonitor_cr.dt())
-							losses_text_list += [f'[{lmonitor.name}] b={len(loss):,} - _loss={str(loss)} {lmonitor_cr}']
+							lmonitor.add_loss_history_k(batch_loss, lmonitor_cr.dt())
+							losses_text_list += [f'[{lmonitor.name}] b={len(batch_loss):,} - _loss={str(batch_loss)} {lmonitor_cr}']
 							lmonitor.k_update() # update k
 							pass
 
