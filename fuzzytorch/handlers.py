@@ -25,6 +25,7 @@ import torch.autograd.profiler as profiler
 def xxx(tdict, device,
     chunk_dtype=torch.float32,
     ):
+	# return TDictHolder(in_tdict).to(device)
     chunk_d = {tdict[k].shape:{} for k in tdict.keys()}
     for key in tdict.keys():
         chunk_d[tdict[key].shape][key] = tdict[key]
@@ -154,9 +155,7 @@ class ModelTrainHandler(object):
 					set_metrics = {metric.name:[] for metric in lmonitor.metrics}
 					for ki,in_tdict in enumerate(set_loader): # batches loop
 						#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
-						in_tdict = xxx(in_tdict, self.device)
-						# in_tdict = TDictHolder(in_tdict).to(self.device)
-						out_tdict = self.model(in_tdict, **training_kwargs)
+						out_tdict = self.model(xxx(in_tdict, self.device), **training_kwargs)
 						#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
 						loss_v = lmonitor.loss(out_tdict, **training_kwargs) # (b)
 						set_losses += [loss_v]
@@ -252,9 +251,7 @@ class ModelTrainHandler(object):
 
 							#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
 							#print_tdict(in_tdict)
-							in_tdict = xxx(in_tdict, self.device)
-							out_tdict = self.model(in_tdict, **training_kwargs) # Feed forward
-							# out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs) # Feed forward
+							out_tdict = self.model(xxx(in_tdict, self.device), **training_kwargs) # Feed forward
 							#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
 							batch_loss = lmonitor.loss(out_tdict, **training_kwargs)
 							batch_loss.backward() # gradient calculation
