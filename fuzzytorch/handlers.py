@@ -370,53 +370,6 @@ class ModelTrainHandler(object):
 		loaded_dic = torch.load(to_load_filedir, map_location=self.device)
 		self.model.load_state_dict(loaded_dic['state_dict'])
 		for lmonitor in self.lmonitors:
-			#lmonitor.history_dict = loaded_dic['lmonitors'][lmonitor.name]
-			pass
+			lmonitor.load_from_dict(loaded_dic['lmonitors'][lmonitor.name])
 			
 		return self.model
-
-
-'''	def evaluate_in_set(self, set_name:str, set_loader, training_kwargs:dict,
-		):
-		self.model.eval() # model eval mode!
-		text = None
-		evaluated = False
-		with torch.no_grad():
-			for lmonitor in self.lmonitors:
-				lmonitor_cr = times.Cronometer()
-				#for lmonitor_aux in self.lmonitors:
-				#	lmonitor_aux.eval() # just in case
-
-				if lmonitor.needs_evaluation():
-					if text is None:
-						text = f'[{set_name}]'
-
-					evaluated = True
-					out_tdicts = []
-					for ki,in_tdict in enumerate(set_loader): # batches loop
-						#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
-						out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs)
-						#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
-						out_tdicts += [out_tdict]
-					out_tdict = minibatch_dict_collate(out_tdicts) # slow?
-
-					### save loss to history & bar text
-					set_loss = lmonitor.loss(out_tdict, **training_kwargs)
-					## SET LOSS TO HYSTORY
-					lmonitor.add_loss_history_epoch(set_loss, lmonitor_cr.dt(), set_name)
-					text += f'[{lmonitor.name}] _loss={str(set_loss)}'
-
-					### save metrics to history & bar text
-					set_metrics_dict = {}
-					for metric in lmonitor.metrics:
-						metric_name = metric.name
-						set_metric = metric(out_tdict, **training_kwargs)
-						#print(set_name, ki, metric.name, set_metric)
-						text += f' - {metric_name}={str(set_metric)}'
-						set_metrics_dict[metric_name] = set_metric
-
-					lmonitor.add_metric_history_epoch(set_metrics_dict, lmonitor_cr.dt(), set_name)
-
-					text += f' {lmonitor_cr}'
-
-		return text, evaluated'''

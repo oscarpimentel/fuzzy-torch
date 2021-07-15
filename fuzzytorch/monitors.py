@@ -14,6 +14,7 @@ from fuzzytools.counters import Counter
 from fuzzytools.datascience.xerror import XError
 import pandas as pd
 from fuzzytools.dataframes import DFBuilder
+from copy import copy, deepcopy
 
 ###################################################################################################################################################
 
@@ -74,14 +75,30 @@ class LossMonitor(object):
 			'counter_epoch':self.counter_epoch,
 			'best_epoch':self.best_epoch,
 			'last_saved_filedir':self.last_saved_filedir,
-		}
-		return {
+			}
+		d = {
 			'info':info,
 			'loss_df':self.loss_df,
 			'opt_df':self.opt_df,
 			'loss_df_epoch':self.loss_df_epoch,
 			'metrics_df_epoch':self.metrics_df_epoch,
-		}
+			}
+		return d
+
+	def load_from_dict(self, _d):
+		d = deepcopy(_d)
+		info = d['info']
+		self.save_mode = info['save_mode']
+		self.target_metric_crit = info['target_metric_crit']
+		self.counter_k = info['counter_k']
+		self.counter_epoch = info['counter_epoch']
+		self.best_epoch = info['best_epoch']
+		self.last_saved_filedir = info['last_saved_filedir']
+
+		self.loss_df = d['loss_df']
+		self.opt_df = d['opt_df']
+		self.loss_df_epoch = d['loss_df_epoch']
+		self.metrics_df_epoch = d['metrics_df_epoch']
 
 	### history methods
 	def add_loss_history_k(self, loss,
