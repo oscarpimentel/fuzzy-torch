@@ -202,7 +202,7 @@ class TemporalEncoder(nn.Module):
 class TimeFILM(nn.Module):
 	def __init__(self, input_dims, te_features, max_te_period,
 		fourier_dims=1,
-		kernel_size=2,
+		kernel_size=1,
 		time_noise_window=0, # regularization in time units
 		activation='relu',
 		residual_dropout=0,

@@ -411,7 +411,7 @@ class MLTimeSelfAttn(nn.Module):
 		residual_dropout=0.0,
 		bias=True,
 		uses_length_wise_batchnorm=1,
-		kernel_size=2,
+		kernel_size=1,
 		time_noise_window=0,
 		fourier_dims=None,
 		mod_dropout=0,
