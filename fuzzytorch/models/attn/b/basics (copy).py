@@ -1,6 +1,6 @@
 from __future__ import print_function
 from __future__ import division
-from . import C_
+from . import _C
 
 import torch
 import torch.nn as nn
@@ -177,8 +177,8 @@ class MLSelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list,
 		max_curve_length=None,
 		num_heads=2,
-		activation=C_.DEFAULT_ACTIVATION,
-		last_activation=C_.DEFAULT_LAST_ACTIVATION,
+		activation=_C.DEFAULT_ACTIVATION,
+		last_activation=_C.DEFAULT_LAST_ACTIVATION,
 		in_dropout=0.0,
 		dropout=0.0,
 		out_dropout=0.0,
@@ -341,9 +341,9 @@ class TimeErrorSelfAttn(SelfAttn):
 		error = error.permute(0,2,1)[:,None,...] # (b,t,1) > (b,1,1,t)
 		error_mask = error.repeat(1, self.num_heads, x.shape[1], 1) # (b,h,t,t)
 		#print(error_mask.shape, error_mask)
-		#pos_error_a = torch.log(torch.exp(self.error_a)+C_.EPS)
-		pos_error_a = torch.sqrt(self.error_a**2+C_.EPS)
-		#pos_error_a = torch.clamp(self.error_a, C_.EPS, None)
+		#pos_error_a = torch.log(torch.exp(self.error_a)+_C.EPS)
+		pos_error_a = torch.sqrt(self.error_a**2+_C.EPS)
+		#pos_error_a = torch.clamp(self.error_a, _C.EPS, None)
 		error_b = self.error_b
 		#error_mask = 2*(error_mask-self.min_error)/(self.max_error-self.min_error)-1 # norm [-1,1]
 		extra_info = {
@@ -366,8 +366,8 @@ class MLTimeErrorSelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, te_features, max_te_period,
 		max_curve_length=None,
 		num_heads=2,
-		activation=C_.DEFAULT_ACTIVATION,
-		last_activation=C_.DEFAULT_LAST_ACTIVATION,
+		activation=_C.DEFAULT_ACTIVATION,
+		last_activation=_C.DEFAULT_LAST_ACTIVATION,
 		in_dropout=0.0,
 		dropout=0.0,
 		out_dropout=0.0,

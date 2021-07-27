@@ -1,6 +1,6 @@
 from __future__ import print_function
 from __future__ import division
-from . import C_
+from . import _C
 
 import torch
 from fuzzytools.files import create_dir, PFile

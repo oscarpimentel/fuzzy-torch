@@ -1,6 +1,6 @@
 from __future__ import print_function
 from __future__ import division
-from . import C_
+from . import _C
 
 import torch
 import torch.nn as nn
@@ -19,7 +19,7 @@ from ..others import TimeFILM
 from .. import seq_utils as seq_utils
 import numpy as np
 
-DEFAULT_NON_LINEAR_ACTIVATION = C_.DEFAULT_NON_LINEAR_ACTIVATION
+DEFAULT_NON_LINEAR_ACTIVATION = _C.DEFAULT_NON_LINEAR_ACTIVATION
 NORM_MODE = 'none' # none pre_norm post_norm
 MLP_K = 1
 NUM_HEADS = 4

@@ -1,6 +1,6 @@
 from __future__ import print_function
 from __future__ import division
-from . import C_
+from . import _C
 
 import torch
 import torch.nn as nn
@@ -257,7 +257,7 @@ def seq_max_pooling(x, onehot,
 def seq_min_max_norm(x, onehot,
 	padding_value=0,
 	zero_diff_value=1,
-	eps=C_.EPS,
+	eps=_C.EPS,
 	):
 	'''
 	x (b,t,f)
@@ -284,7 +284,7 @@ def seq_min_max_norm(x, onehot,
 def seq_avg_norm(x, onehot, # FIXME
 	padding_value=0,
 	zero_diff_value=1,
-	eps=C_.EPS,
+	eps=_C.EPS,
 	):
 	'''
 	x (b,t,f)
@@ -294,12 +294,12 @@ def seq_avg_norm(x, onehot, # FIXME
 	assert torch.all(x>=0)
 
 	avg_ = seq_avg_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
-	return x/(avg_+C_.EPS)
+	return x/(avg_+_C.EPS)
 
 def seq_sum_norm(x, onehot, # FIXME
 	padding_value=0,
 	zero_diff_value=1,
-	eps=C_.EPS,
+	eps=_C.EPS,
 	):
 	'''
 	x (b,t,f)
@@ -309,7 +309,7 @@ def seq_sum_norm(x, onehot, # FIXME
 	assert torch.all(x>=0)
 
 	sum_ = seq_sum_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
-	return x/(sum_+C_.EPS)
+	return x/(sum_+_C.EPS)
 
 ###################################################################################################################################################
 

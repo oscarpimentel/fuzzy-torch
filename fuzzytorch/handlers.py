@@ -1,13 +1,13 @@
 from __future__ import print_function
 from __future__ import division
-from . import C_
+from . import _C
 
 import os
 import torch
 import numpy as np
 
 from fuzzytools.progress_bars import ProgressBarMultiColor
-from fuzzytools import C_ as C_fc
+from fuzzytools import _C as _Cfc
 from fuzzytools import times
 from fuzzytools import files
 from fuzzytools import strings
@@ -90,7 +90,7 @@ class ModelTrainHandler(object):
 
 	def get_complete_model_name(self):
 		self.complete_model_name = f'{self.model_name}'
-		self.complete_model_name += '' if self.extra_model_name is None else f'{C_.KEY_KEY_SEP_CHAR}{self.extra_model_name}'
+		self.complete_model_name += '' if self.extra_model_name is None else f'{_C.KEY_KEY_SEP_CHAR}{self.extra_model_name}'
 		return self.complete_model_name
 
 	def get_complete_save_roodir(self):
@@ -114,7 +114,7 @@ class ModelTrainHandler(object):
 
 	def __repr__(self):
 		txt = ''
-		txt += strings.get_bar(char=C_fc.BOT_SQUARE_CHAR) + '\n'
+		txt += strings.get_bar(char=_Cfc.BOT_SQUARE_CHAR) + '\n'
 		txt += strings.color_str(f'model_name={self.model.get_name()}({count_parameters(self.model):,}[p])', 'blue')+'\n'
 		txt += strings.color_str(f'id={self.id}', 'blue')+'\n'
 		txt += strings.color_str(f'device={self.device} - device_name={self.device_name}', 'green')+'\n'
@@ -127,7 +127,7 @@ class ModelTrainHandler(object):
 		# check is can be saved
 		can_save_model = any([lmonitor.check_save_condition(set_name) for lmonitor in self.lmonitors])
 		if can_save_model:
-			saved_filedir = f'{self.complete_save_roodir}/id{C_.KEY_VALUE_SEP_CHAR}{self.id}{C_.KEY_KEY_SEP_CHAR}epoch{C_.KEY_VALUE_SEP_CHAR}{epoch}.{C_.SAVE_FEXT}'
+			saved_filedir = f'{self.complete_save_roodir}/id{_C.KEY_VALUE_SEP_CHAR}{self.id}{_C.KEY_KEY_SEP_CHAR}epoch{_C.KEY_VALUE_SEP_CHAR}{epoch}.{_C.SAVE_FEXT}'
 			self.file = FTFile(saved_filedir, self.model, self.lmonitors)
 			for lmonitor in self.lmonitors:
 				lmonitor.set_last_saved_filedir(saved_filedir)
@@ -330,7 +330,7 @@ class ModelTrainHandler(object):
 			txt += f' - time_per_epoch={lmonitor.get_time_per_epoch()}[segs]'
 			txt += f' - total_time={lmonitor.get_total_time()}[segs]'
 			print(txt)
-		print(strings.get_bar(char=C_fc.TOP_SQUARE_CHAR))
+		print(strings.get_bar(char=_Cfc.TOP_SQUARE_CHAR))
 		no_error_train = not end_with_nan
 		return no_error_train
 
@@ -347,7 +347,7 @@ class ModelTrainHandler(object):
 		if not target_id==self.id:
 			self.id = target_id
 
-		filedirs = files.get_filedirs(self.complete_save_roodir, fext=C_.SAVE_FEXT)
+		filedirs = files.get_filedirs(self.complete_save_roodir, fext=_C.SAVE_FEXT)
 		if len(filedirs)==0:
 			prints.print_red(f'*** no files in {self.complete_save_roodir} ***')
 			raise Exception(f'*** no files in {self.complete_save_roodir} ***')
@@ -364,7 +364,7 @@ class ModelTrainHandler(object):
 			epochs = sorted(epochs)
 			target_epoch = epochs[-1]
 
-		to_load_filedir = f'{self.complete_save_roodir}/id{C_.KEY_VALUE_SEP_CHAR}{target_id}{C_.KEY_KEY_SEP_CHAR}epoch{C_.KEY_VALUE_SEP_CHAR}{target_epoch}.{C_.SAVE_FEXT}'
+		to_load_filedir = f'{self.complete_save_roodir}/id{_C.KEY_VALUE_SEP_CHAR}{target_id}{_C.KEY_KEY_SEP_CHAR}epoch{_C.KEY_VALUE_SEP_CHAR}{target_epoch}.{_C.SAVE_FEXT}'
 		prints.print_blue(f'> loading model={to_load_filedir}')
 
 		loaded_dic = torch.load(to_load_filedir, map_location=self.device)

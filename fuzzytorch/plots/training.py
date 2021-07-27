@@ -1,6 +1,6 @@
 from __future__ import print_function
 from __future__ import division
-from . import C_
+from . import _C
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,7 +16,7 @@ def plot_loss(train_handler,
 	save_rootdir:str=None,
 	fig=None,
 	ax=None,
-	figsize:tuple=C_.PLOT_FIGSIZE,
+	figsize:tuple=_C.PLOT_FIGSIZE,
 	cmap=None,
 	alpha:float=0.5,
 	xlim:tuple=(1,None),
@@ -24,7 +24,7 @@ def plot_loss(train_handler,
 	verbose:int=0,
 	**kwargs):
 
-	fig, ax = plt.subplots(1,1, figsize=figsize, dpi=C_.PLOT_DPI) if fig is None else (fig, ax)
+	fig, ax = plt.subplots(1,1, figsize=figsize, dpi=_C.PLOT_DPI) if fig is None else (fig, ax)
 	for lmonitor in train_handler.lmonitors:
 		loss = lmonitor.loss_df['_loss']
 		sublosses_names = [c for c in lmonitor.loss_df.columns if c[:1]!='_']
@@ -35,8 +35,8 @@ def plot_loss(train_handler,
 		for k,subloss_name in enumerate(sublosses_names):
 			ax.plot(iterations, sublosses[subloss_name], c=colors[k], label=f'{subloss_name}', alpha=alpha)
 
-		ax.plot(iterations, loss, c=C_.C_MAIN_LOSS, alpha=alpha, lw=1)
-		ax.plot(iterations, gaussian_filter1d(loss, sigma), c=C_.C_MAIN_LOSS, label=f'{lmonitor.name}') # gaussian fit for smooth
+		ax.plot(iterations, loss, c=_C._CMAIN_LOSS, alpha=alpha, lw=1)
+		ax.plot(iterations, gaussian_filter1d(loss, sigma), c=_C._CMAIN_LOSS, label=f'{lmonitor.name}') # gaussian fit for smooth
 		
 	best_epoch = lmonitor.get_best_epoch()
 	#best_iteration = best_epoch*trainh.history_dict['ks_epochs']/trainh.history_dict['k_every']
@@ -46,14 +46,14 @@ def plot_loss(train_handler,
 	ax.set_xlim(xlim)
 	ax.set_ylim(ylim)
 	ax.legend()
-	ax.grid(alpha=C_.PLOT_GRID_ALPHA)
+	ax.grid(alpha=_C.PLOT_GRID_ALPHA)
 	complete_save_roodir = train_handler.complete_save_roodir.split('/')[-1] # train_handler.get_complete_save_roodir().split('/')[-1]
 	title = f'model: {complete_save_roodir} - id: {train_handler.id}' 
 	ax.set_title(title)
 
 	if not save_rootdir is None:
 		new_save_dir = f'{save_rootdir}/{complete_save_roodir}'
-		filedir = f'{new_save_dir}/plot{C_.KEY_VALUE_SEP_CHAR}trainloss{C_.KEY_KEY_SEP_CHAR}id{C_.KEY_VALUE_SEP_CHAR}{train_handler.id}.png'
+		filedir = f'{new_save_dir}/plot{_C.KEY_VALUE_SEP_CHAR}trainloss{_C.KEY_KEY_SEP_CHAR}id{_C.KEY_VALUE_SEP_CHAR}{train_handler.id}.png'
 		save_fig(filedir, fig)
 
 	return fig, ax
@@ -64,7 +64,7 @@ def plot_evaluation_loss(train_handler,
 	title=None,
 	fig=None,
 	ax=None,
-	figsize:tuple=C_.PLOT_FIGSIZE,
+	figsize:tuple=_C.PLOT_FIGSIZE,
 	cmap=None,
 	alpha:float=1,
 	xlim:tuple=(1,None),
@@ -72,7 +72,7 @@ def plot_evaluation_loss(train_handler,
 	verbose:int=0,
 	**kwargs):
 
-	fig, ax = (plt.subplots(1,1, figsize=figsize, dpi=C_.PLOT_DPI) if fig is None else (fig, ax))
+	fig, ax = (plt.subplots(1,1, figsize=figsize, dpi=_C.PLOT_DPI) if fig is None else (fig, ax))
 	for trainh in train_handler.train_handlers:
 		set_names = list(trainh.history_dict['sublosses_evolution_epochcheck'].keys())
 		for set_name in set_names:
@@ -89,7 +89,7 @@ def plot_evaluation_loss(train_handler,
 				ax.plot(epochs, subloss_evol, get_train_style(is_train), alpha=0.5 if is_train else 1, c=colors[kmn], label=label)
 
 			label = f'{trainh.name} - set: {set_name}'
-			ax.plot(epochs, np.array(finalloss), get_train_style(is_train), c=C_.C_MAIN_LOSS, alpha=(0.5 if is_train else 1), label=label)
+			ax.plot(epochs, np.array(finalloss), get_train_style(is_train), c=_C._CMAIN_LOSS, alpha=(0.5 if is_train else 1), label=label)
 
 	best_epoch = trainh.history_dict['best_epoch']
 	ax.axvline(x=best_epoch, c='k', label='best epoch', lw=1, alpha=1) # vertical line in best epoch
@@ -98,7 +98,7 @@ def plot_evaluation_loss(train_handler,
 	ax.set_xlim(xlim)
 	ax.set_ylim(ylim)
 	ax.legend()
-	ax.grid(alpha=C_.PLOT_GRID_ALPHA)
+	ax.grid(alpha=_C.PLOT_GRID_ALPHA)
 	ax.set_title(get_title(train_handler, title))
 
 	if not save_dir is None:
@@ -117,7 +117,7 @@ def plot_evaluation_metrics(train_handler,
 	title=None,
 	fig=None,
 	ax=None,
-	figsize:tuple=C_.PLOT_FIGSIZE,
+	figsize:tuple=_C.PLOT_FIGSIZE,
 	cmap=None,
 	alpha:float=1,
 	xlim:tuple=(1,None),
@@ -125,7 +125,7 @@ def plot_evaluation_metrics(train_handler,
 	verbose:int=0,
 	**kwargs):
 	
-	fig, ax = (plt.subplots(1,1, figsize=figsize, dpi=C_.PLOT_DPI) if fig is None else (fig, ax))
+	fig, ax = (plt.subplots(1,1, figsize=figsize, dpi=_C.PLOT_DPI) if fig is None else (fig, ax))
 	for trainh in train_handler.train_handlers:
 		set_names = list(trainh.history_dict['metrics_evolution_epochcheck'].keys())
 		for set_name in set_names:
@@ -147,7 +147,7 @@ def plot_evaluation_metrics(train_handler,
 	ax.set_xlim(xlim)
 	ax.set_ylim(ylim)
 	ax.legend()
-	ax.grid(alpha=C_.PLOT_GRID_ALPHA)
+	ax.grid(alpha=_C.PLOT_GRID_ALPHA)
 	ax.set_title(get_title(train_handler, title))
 
 	if not save_dir is None:
@@ -164,7 +164,7 @@ def plot_optimizer(train_handler,
 	title=None,
 	fig=None,
 	ax=None,
-	figsize:tuple=C_.PLOT_FIGSIZE,
+	figsize:tuple=_C.PLOT_FIGSIZE,
 	cmap=None,
 	alpha:float=1,
 	xlim:tuple=(1,None),
@@ -172,7 +172,7 @@ def plot_optimizer(train_handler,
 	verbose:int=0,
 	**kwargs):
 
-	fig, ax = (plt.subplots(1,1, figsize=figsize, dpi=C_.PLOT_DPI) if fig is None else (fig, ax))
+	fig, ax = (plt.subplots(1,1, figsize=figsize, dpi=_C.PLOT_DPI) if fig is None else (fig, ax))
 	for trainh in train_handler.train_handlers:
 		opt_decay_kwargs = trainh.history_dict['opt_kwargs_evolution_epoch'].keys()
 		for key in opt_decay_kwargs:
@@ -187,7 +187,7 @@ def plot_optimizer(train_handler,
 	ax.set_xlim(xlim)
 	ax.set_ylim(ylim)
 	ax.legend()
-	ax.grid(alpha=C_.PLOT_GRID_ALPHA)
+	ax.grid(alpha=_C.PLOT_GRID_ALPHA)
 	ax.set_title(get_title(train_handler, title))
 
 	if not save_dir is None:

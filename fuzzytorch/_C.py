@@ -1,6 +1,6 @@
 import sys
 import numpy as np
-from fuzzytools import C_ as FCC_
+from fuzzytools import _C as FC_C
 import torch
 
 ###################################################################################################################################################
@@ -21,12 +21,12 @@ SM_ONLY_INF_METRIC = 'only_inf_metric'
 SM_ONLY_SUP_METRIC = 'only_sup_metric'
 
 SAVE_FEXT = 'tfes'
-KEY_KEY_SEP_CHAR = FCC_.KEY_KEY_SEP_CHAR
-KEY_VALUE_SEP_CHAR = FCC_.KEY_VALUE_SEP_CHAR
+KEY_KEY_SEP_CHAR = FC_C.KEY_KEY_SEP_CHAR
+KEY_VALUE_SEP_CHAR = FC_C.KEY_VALUE_SEP_CHAR
 
 DUMMY_TEXT = 'Dummy'
 
 PLOT_FIGSIZE = (13,4)
 PLOT_GRID_ALPHA = 0.25
 PLOT_DPI = 80
-C_MAIN_LOSS = 'k'
+_CMAIN_LOSS = 'k'

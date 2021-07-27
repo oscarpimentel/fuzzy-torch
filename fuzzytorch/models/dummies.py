@@ -1,6 +1,6 @@
 from __future__ import print_function
 from __future__ import division
-from . import C_
+from . import _C
 
 import torch
 import torch.nn as nn
@@ -27,7 +27,7 @@ class DummyModule(nn.Module):
 		return 'DummyModule'
 
 	def __repr__(self):
-		txt = C_.DUMMY_TEXT
+		txt = _C.DUMMY_TEXT
 		try:
 			txt += f' output_dims={self.output_dims},'
 		except:

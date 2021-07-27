@@ -1,6 +1,6 @@
 from __future__ import print_function
 from __future__ import division
-from . import C_
+from . import _C
 
 import torch
 import torch.nn as nn
@@ -9,7 +9,7 @@ from . import non_linear
 from . import utils
 from fuzzytools import strings as strings
 
-DEFAULT_NON_LINEAR_ACTIVATION = C_.DEFAULT_NON_LINEAR_ACTIVATION
+DEFAULT_NON_LINEAR_ACTIVATION = _C.DEFAULT_NON_LINEAR_ACTIVATION
 
 ###################################################################################################################################################
 

@@ -1,6 +1,6 @@
 from __future__ import print_function
 from __future__ import division
-from . import C_
+from . import _C
 
 import os
 import torch.nn as nn
@@ -20,11 +20,11 @@ from copy import copy, deepcopy
 
 class LossMonitor(object):
 	def __init__(self, loss, optimizer, metrics,
-		save_mode:str=C_.SM_NO_SAVE,
+		save_mode:str=_C.SM_NO_SAVE,
 		target_metric_crit:str=None,
-		k_counter_duration:int=C_.K_COUNTER_DURATION,
-		val_epoch_counter_duration:int=C_.VAL_EPOCH_COUNTER_DURATION,
-		earlystop_epoch_duration:int=C_.EARLYSTOP_EPOCH_DURATION,
+		k_counter_duration:int=_C.K_COUNTER_DURATION,
+		val_epoch_counter_duration:int=_C.VAL_EPOCH_COUNTER_DURATION,
+		earlystop_epoch_duration:int=_C.EARLYSTOP_EPOCH_DURATION,
 		**kwargs):
 
 		### CHECKS
@@ -59,7 +59,7 @@ class LossMonitor(object):
 	### repr
 	def __repr__(self):
 		def get_metrics_repr():
-			return f' (target_metric_crit={self.target_metric_crit})' if self.save_mode in [C_.SM_ONLY_INF_METRIC, C_.SM_ONLY_SUP_METRIC] else ''
+			return f' (target_metric_crit={self.target_metric_crit})' if self.save_mode in [_C.SM_ONLY_INF_METRIC, _C.SM_ONLY_SUP_METRIC] else ''
 		txt = ''
 		txt += f'[{self.name}]'+'\n'
 		txt += f' - opt-parameters={len(self.optimizer):,}[p] - device={self.optimizer.get_device()}'+'\n'
@@ -175,7 +175,7 @@ class LossMonitor(object):
 		self.last_saved_filedir = last_saved_filedir
 
 	def needs_save(self):
-		return not self.save_mode==C_.SM_NO_SAVE
+		return not self.save_mode==_C.SM_NO_SAVE
 
 	def train(self):
 		self.optimizer.train()
@@ -228,17 +228,17 @@ class LossMonitor(object):
 		files.delete_filedir(filedir, verbose=0) # remove last best model
 
 	def check_save_condition(self, set_name):
-		if self.save_mode==C_.SM_NO_SAVE:
+		if self.save_mode==_C.SM_NO_SAVE:
 			return False
 
-		elif self.save_mode==C_.SM_ALL:
+		elif self.save_mode==_C.SM_ALL:
 			return True
 
-		elif self.save_mode==C_.SM_ONLY_ALL:
+		elif self.save_mode==_C.SM_ONLY_ALL:
 			self.remove_filedir(self.last_saved_filedir) # remove last best model
 			return True
 
-		elif self.save_mode==C_.SM_ONLY_INF_LOSS:
+		elif self.save_mode==_C.SM_ONLY_INF_LOSS:
 			loss_df_epoch = self.loss_df_epoch.get_df()
 			loss_evolution = [np.inf]+[v for v in loss_df_epoch['_loss'][loss_df_epoch['_set'].isin([set_name])].values]
 			loss_history = loss_evolution[:-1] # history
@@ -251,7 +251,7 @@ class LossMonitor(object):
 			else:
 				return False
 
-		elif self.save_mode==C_.SM_ONLY_INF_METRIC:
+		elif self.save_mode==_C.SM_ONLY_INF_METRIC:
 			metrics_df_epoch = self.metrics_df_epoch.get_df()
 			metric_evolution = [np.inf]+[v for v in metrics_df_epoch[self.target_metric_crit][metrics_df_epoch['_set'].isin([set_name])].values]
 			metric_history = metric_evolution[:-1] # history
@@ -264,7 +264,7 @@ class LossMonitor(object):
 			else:
 				return False
 
-		elif self.save_mode==C_.SM_ONLY_SUP_METRIC:
+		elif self.save_mode==_C.SM_ONLY_SUP_METRIC:
 			metrics_df_epoch = self.metrics_df_epoch.get_df()
 			metric_evolution = [-np.inf]+[v for v in metrics_df_epoch[self.target_metric_crit][metrics_df_epoch['_set'].isin([set_name])].values]
 			metric_history = metric_evolution[:-1] # history
