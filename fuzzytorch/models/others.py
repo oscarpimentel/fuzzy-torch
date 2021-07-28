@@ -98,7 +98,7 @@ class TemporalEncoder(nn.Module):
 		self.te_phases = torch.nn.Parameter(torch.as_tensor(self.initial_phases), requires_grad=self.ws_phases_requires_grad)
 
 		n = self.get_output_dims()//2
-		te_scales = np.array([math.exp(-math.floor(i/2)*self.init_k_exp) for i in range(0, 2*n)]).astype(np.float32)
+		te_scales = np.array([math.exp(-math.floor(i/2)*self.init_k_exp) for i in range(0, 2*n)]).astype(np.float32) # exponential initialization to start training with smooth functions
 		self.te_scales = torch.nn.Parameter(torch.as_tensor(te_scales), requires_grad=False)
 
 	def generate_initial_tensors(self):
