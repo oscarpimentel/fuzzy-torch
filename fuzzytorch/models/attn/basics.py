@@ -527,7 +527,7 @@ class MLTimeSelfAttn(nn.Module):
 		assert len(x.shape)==3
 		assert len(time.shape)==2
 
-		x = self.te_film(x, time, onehot) # fixme
+		x = self.te_film(x, time, onehot)
 		for k,self_attn in enumerate(self.self_attns):
 			x, scores = self_attn(x, onehot,
 				mul_attn_mask,

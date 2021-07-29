@@ -242,23 +242,7 @@ class TimeFILM(nn.Module):
 		#self.te_mod_beta = TemporalEncoder(self.te_features, self.max_te_period)
 		print('temporal_encoder:',self.temporal_encoder)
 
-		#self.gamma_f = Linear(self.te_features, self.fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
-		#self.beta_f = Linear(self.te_features, self.fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
 		self.gamma_beta_f = Linear(self.te_features, self.fourier_dims, split_out=2, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
-
-		# for param in self.gamma_beta_f.parameters():
-			# param.requires_grad = False
-
-		# torch.nn.init.constant_(self.gamma_beta_f.linear.weight, 1.)
-
-		#self.gamma_w = nn.Parameter(torch.ones((self.mod_output_dims, self.mod_input_dims)), requires_grad=False)
-		#self.gamma_f = nn.Linear(self.mod_input_dims, self.mod_output_dims, bias=False)
-		
-		# self.x_proj = Linear(self.input_dims, self.fourier_dims, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
-
-		#self.z_proj = Linear(self.fourier_dims, self.input_dims, bias=True, **linear_kwargs)
-		#print('z_proj',self.z_proj)
-
 		self.cnn_pad = nn.ConstantPad1d([self.kernel_size-1, 0], 0)
 		self.cnn = nn.Conv1d(self.fourier_dims, self.input_dims, kernel_size=self.kernel_size, padding=0, bias=True)
 
@@ -277,17 +261,8 @@ class TimeFILM(nn.Module):
 		return d
 
 	def f_mod(self, x, time, onehot):
-		#gamma = self.gamma_f(torch.cat([x,mod], dim=-1))
-		#gamma = self.gamma_f(temporal_encoding)
-		#beta = self.beta_f(te_beta)
 		temporal_encoding = self.temporal_encoder(time)
 		gamma, beta = self.gamma_beta_f(temporal_encoding)
-		# gamma = gamma/math.sqrt(self.te_features//2)
-		# beta = beta/math.sqrt(self.te_features//2)
-
-		#x_mod = self.x_proj(x)*gamma+beta
-		#x_mod = x*gamma+beta
-		#gamma = _gamma+1
 
 		if self.mod_dropout>0:
 			valid_mask = torch.bernoulli(torch.full(gamma.shape, fill_value=self.mod_dropout, device=gamma.device)).bool()
@@ -295,9 +270,6 @@ class TimeFILM(nn.Module):
 			beta = beta.masked_fill(valid_mask, 0)
 
 		x_mod = x*gamma+beta
-		# x_mod = x*(gamma+1)+beta
-		# x_mod = x+beta
-		# x_mod = self.x_proj(x)*gamma+beta
 
 		if self.uses_norm:
 			x_mod = self.norm(x_mod)
@@ -305,26 +277,16 @@ class TimeFILM(nn.Module):
 		x_mod = x_mod.permute(0,2,1)
 		x_mod = self.cnn(self.cnn_pad(x_mod))
 		x_mod = x_mod.permute(0,2,1)
-
 		return x_mod
 
 	def forward(self, x, time, onehot, **kwargs):
-		# x (b,t,fx)
-		# time (b,t)
+		# x: (b,t,fx)
+		# time: (b,t)
 		assert x.shape[-1]==self.input_dims
-		#te_beta = self.te_mod_beta(time)
-		
-		#x = self.x_mod(x, temporal_encoding, te_beta)
 
-		#x = self.x_mod(x, temporal_encoding, onehot)
-		#x = self.bn(x, onehot) # PRE NORM
-		#x = sub_x
-
-		fx = self.f_mod(x, time, onehot)
-		new_x = fx
-		# new_x = x+self.residual_dropout_f(fx) # x+f(x)
-		new_x = self.activation_f(new_x, dim=-1)
-		return new_x
+		x_mod = self.f_mod(x, time, onehot)
+		x_mod = self.activation_f(x_mod, dim=-1)
+		return x_mod
 
 	def __len__(self):
 		return utils.count_parameters(self)
