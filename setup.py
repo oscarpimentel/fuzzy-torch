@@ -7,7 +7,7 @@ with open('requirements.txt') as f:
     required = f.read().splitlines()
 
 setuptools.setup(
-	name='fuzzy-torch',
+	name='fuzzytorch',
 	version='0.0.1',
 	author='Óscar Pimentel Fuentes',
 	author_email='oscarlo.pimentel@gmail.com',
