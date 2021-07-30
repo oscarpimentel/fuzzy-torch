@@ -12,8 +12,8 @@ from ..basics import MLP, ResidualBlockHandler
 from torch.nn.init import xavier_uniform_, constant_, eye_
 from fuzzytools import strings as strings
 from fuzzytools import lists as lists
-# from .pytorch_multihead_clone import MultiheadAttention
-from torch.nn import MultiheadAttention
+from .pytorch_multihead_clone import MultiheadAttention
+# from torch.nn import MultiheadAttention
 from .batch_norms import LayerNorm, MaskedBatchNorm1d
 from ..others import TimeFILM
 from .. import seq_utils as seq_utils
