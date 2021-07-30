@@ -52,6 +52,9 @@ class SelfAttnWrapper(nn.Module):
 
 	def forward(self, x,
 		**kwargs):
+		'''
+		wrapper for self-attention operation
+		'''
 		queries = x.permute(1,0,2) if self.uses_permutation else x # (b,t,f) > (t,b,f)
 		keys = x.permute(1,0,2) if self.uses_permutation else x # (b,t,f) > (t,b,f)
 		values = x.permute(1,0,2) if self.uses_permutation else x # (b,t,f) > (t,b,f)
