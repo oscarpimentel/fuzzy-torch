@@ -75,10 +75,20 @@ class ResidualBlockHandler(nn.Module):
 		norm_kwargs={},
 		f_returns_tuple=False,
 		):
-		fx_args = self.f(self.norm_x(x, norm_args=norm_args, norm_kwargs=norm_kwargs), *f_args, **f_kwargs) if self.norm_mode=='pre_norm' else self.f(x, *f_args, **f_kwargs)
+		'''
+		auxiliar class for residual connection
+		'''
+		if self.norm_mode=='pre_norm':
+			fx_args = self.f(self.norm_x(x, norm_args=norm_args, norm_kwargs=norm_kwargs), *f_args, **f_kwargs)
+		else:
+			fx_args = self.f(x, *f_args, **f_kwargs)
+
 		fx = fx_args[0] if f_returns_tuple else fx_args
 		new_x = x+self.residual_dropout_f(fx) # x+f(x)
-		new_x = self.norm_x(x, norm_args=norm_args, norm_kwargs=norm_kwargs) if self.norm_mode=='post_norm' else new_x
+
+		if self.norm_mode=='post_norm':
+			new_x = self.norm_x(new_x, norm_args=norm_args, norm_kwargs=norm_kwargs)
+			
 		new_x = self.activation_f(new_x, dim=-1)
 		assert x.shape==new_x.shape
 		if f_returns_tuple:

@@ -232,6 +232,8 @@ class SelfAttn(nn.Module):
 				scores = scores.reshape(b,t,h*qt)
 				scores = seq_utils.seq_last_element(scores, onehot) # last element
 				scores = scores.reshape(b,h,qt)
+			else: # from source version
+				pass # for now...
 
 		return x, scores
 
