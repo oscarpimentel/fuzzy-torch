@@ -269,7 +269,7 @@ class TimeFILM(nn.Module):
 			gamma = gamma.masked_fill(valid_mask, 0)
 			beta = beta.masked_fill(valid_mask, 0)
 
-		x_mod = x*gamma+beta
+		x_mod = x*gamma+beta # element-wise modulation
 
 		if self.uses_norm:
 			x_mod = self.norm(x_mod)
