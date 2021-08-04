@@ -201,7 +201,7 @@ class TemporalEncoder(nn.Module):
 
 class TimeFILM(nn.Module):
 	def __init__(self, input_dims, te_features, max_te_period,
-		fourier_dims=1,
+		fourier_dims=1, # to delete
 		kernel_size=1,
 		time_noise_window=0, # regularization in time units
 		activation='relu',
@@ -218,7 +218,6 @@ class TimeFILM(nn.Module):
 		self.te_features = te_features
 		self.max_te_period = max_te_period
 		self.fourier_dims = int(input_dims*fourier_dims)
-
 		self.fourier_dims = input_dims
 
 		self.kernel_size = kernel_size
@@ -230,6 +229,11 @@ class TimeFILM(nn.Module):
 		self.reset()
 
 	def reset(self):
+		### for ablation
+		self.dummy = self.te_features<=0
+		if self.is_dummy():
+			self.te_features = 2
+
 		linear_kwargs = {
 			'activation':'linear',
 			#'bias':self.bias,
@@ -260,6 +264,9 @@ class TimeFILM(nn.Module):
 		d.update(self.temporal_encoder.get_info())
 		return d
 
+	def is_dummy(self):
+		return self.dummy
+
 	def f_mod(self, x, time, onehot):
 		temporal_encoding = self.temporal_encoder(time)
 		gamma, beta = self.gamma_beta_f(temporal_encoding)
@@ -269,7 +276,10 @@ class TimeFILM(nn.Module):
 			gamma = gamma.masked_fill(valid_mask, 0)
 			beta = beta.masked_fill(valid_mask, 0)
 
-		x_mod = x*gamma+beta # element-wise modulation
+		if self.is_dummy():
+			x_mod = x # for ablation
+		else:
+			x_mod = x*gamma+beta # element-wise modulation
 
 		if self.uses_norm:
 			x_mod = self.norm(x_mod)

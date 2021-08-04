@@ -84,7 +84,7 @@ class ResidualBlockHandler(nn.Module):
 			fx_args = self.f(x, *f_args, **f_kwargs)
 
 		fx = fx_args[0] if f_returns_tuple else fx_args
-		new_x = x+self.residual_dropout_f(fx) # x+f(x)
+		new_x = x+self.residual_dropout_f(fx) # x:=x+f(x)
 
 		if self.norm_mode=='post_norm':
 			new_x = self.norm_x(new_x, norm_args=norm_args, norm_kwargs=norm_kwargs)
