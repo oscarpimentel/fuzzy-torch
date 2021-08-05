@@ -229,17 +229,13 @@ class TimeFILM(nn.Module):
 		self.reset()
 
 	def reset(self):
-		### for ablation
 		self.dummy = self.te_features<=0
-		if self.is_dummy():
-			self.te_features = 2
-
 		linear_kwargs = {
 			'activation':'linear',
 			#'bias':self.bias,
 			}
 		assert self.input_dims>0
-		self.temporal_encoder = TemporalEncoder(self.te_features, self.max_te_period,
+		self.temporal_encoder = TemporalEncoder(2 if self.is_dummy() else self.te_features, self.max_te_period,
 			time_noise_window=self.time_noise_window,
 			mod_dropout=self.mod_dropout,
 			)
@@ -277,7 +273,7 @@ class TimeFILM(nn.Module):
 			beta = beta.masked_fill(valid_mask, 0)
 
 		if self.is_dummy():
-			x_mod = x # for ablation
+			x_mod = x*1+0 # for ablation
 		else:
 			x_mod = x*gamma+beta # element-wise modulation
 
