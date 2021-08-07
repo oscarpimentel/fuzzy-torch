@@ -94,7 +94,7 @@ class TemporalEncoder(nn.Module):
 		self.initial_ws = self.period2w(periods)
 		self.initial_phases = phases
 
-		self.te_ws = torch.nn.Parameter(torch.as_tensor(self.initial_ws), requires_grad=self.ws_phases_requires_grad)
+		self.te_ws = torch.nn.Parameter(torch.as_tensor(self.initial_ws), requires_grad=self.ws_phases_requires_grad) # from lower to higher frequencies
 		self.te_phases = torch.nn.Parameter(torch.as_tensor(self.initial_phases), requires_grad=self.ws_phases_requires_grad)
 
 		n = self.get_output_dims()//2
@@ -102,11 +102,13 @@ class TemporalEncoder(nn.Module):
 		self.te_scales = torch.nn.Parameter(torch.as_tensor(te_scales), requires_grad=False)
 
 	def generate_initial_tensors(self):
+		'''
+		# Tmax/1, Tmax/1, Tmax/2, TMax/2, , Tmax/3, TMax/3, ...
+		'''
 		if self.min_te_period is None:
 			n = self.get_output_dims()//2
-			#periods = np.repeat(np.array([self.max_te_period/2**i for i in np.arange(n)]), 2, axis=0).astype(np.float32) # juxta
-			periods = np.repeat(np.array([self.max_te_period/(i+1) for i in np.arange(n)]), 2, axis=0).astype(np.float32) # fourier
-			phases = np.array([math.pi/2 if i%2==0 else 0 for i in range(0, 2*n)]).astype(np.float32)
+			periods = np.repeat(np.array([self.max_te_period/(i+1) for i in np.arange(0, n)]), 2, axis=0).astype(np.float32) # from higher to lower periods
+			phases = np.array([math.pi/2 if i%2==0 else 0 for i in range(0, 2*n)]).astype(np.float32) # for sin, cos
 		else:
 			periods = np.linspace(self.max_te_period, self.min_te_period, self.get_output_dims()).astype(np.float32)
 			phases = np.zeros_like(periods).astype(np.float32)
@@ -152,7 +154,6 @@ class TemporalEncoder(nn.Module):
 		return txt
 
 	def get_output_dims(self):
-		#return self.te_features+1
 		return self.te_features
 
 	def get_te_ws(self):
@@ -255,7 +256,7 @@ class TimeFILM(nn.Module):
 	def get_info(self):
 		assert not self.training, 'you can not access this method in training mode'
 		d = {
-			'weight':tensor_to_numpy(self.gamma_beta_f.linear.weight),
+			'weight':tensor_to_numpy(self.gamma_beta_f.linear.weight), # (2K,2M)
 			}
 		d.update(self.temporal_encoder.get_info())
 		return d
@@ -264,8 +265,8 @@ class TimeFILM(nn.Module):
 		return self.dummy
 
 	def f_mod(self, x, time, onehot):
-		temporal_encoding = self.temporal_encoder(time)
-		gamma, beta = self.gamma_beta_f(temporal_encoding)
+		temporal_encoding = self.temporal_encoder(time) # (b,t,2M)
+		gamma, beta = self.gamma_beta_f(temporal_encoding) # (b,t,2M)>(b,t,2K)>[(b,t,K),(b,t,K)]
 
 		if self.mod_dropout>0:
 			valid_mask = torch.bernoulli(torch.full(gamma.shape, fill_value=self.mod_dropout, device=gamma.device)).bool()
