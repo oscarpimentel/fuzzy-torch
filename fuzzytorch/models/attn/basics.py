@@ -386,8 +386,8 @@ class TimeSelfAttn(SelfAttn):
 			)
 		self.error_a = torch.nn.Parameter(torch.tensor([1.]*self.num_heads), requires_grad=True)
 		self.error_b = torch.nn.Parameter(torch.tensor([0.]*self.num_heads), requires_grad=True)
-		self.min_error = np.infty
-		self.max_error = -np.infty
+		# self.min_error = np.infty
+		# self.max_error = -np.infty
 		#self.min_error = 0
 		#self.max_error = 0.05
 
