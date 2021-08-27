@@ -240,28 +240,6 @@ class MLRNN(nn.Module):
 			x,_ = nn.utils.rnn.pad_packed_sequence(x_packed, batch_first=True, padding_value=0, total_length=self.max_curve_length) # argument is Sequence
 		return x, extra_info
 
-	# def forward(self, x, onehot,
-	# 	**kwargs):
-	# 	'''
-	# 	Parameters
-	# 	----------
-	# 	x (b,t,f): input tensor.
-	# 	onehot (b,t)
-
-	# 	Return
-	# 	----------
-	# 	x_out: (b,t,h): output tensor.
-	# 	'''
-	# 	assert onehot.dtype==torch.bool
-	# 	assert len(onehot.shape)==2
-	# 	assert x.shape[:-1]==onehot.shape
-	# 	assert len(x.shape)==3
-
-	# 	extra_info = {}
-	# 	for k,rnn in enumerate(self.rnns):
-	# 		x = rnn(x, **kwargs)
-	# 	return x, extra_info
-
 	def __len__(self):
 		return utils.count_parameters(self)
 

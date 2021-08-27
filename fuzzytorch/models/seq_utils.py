@@ -30,16 +30,20 @@ class LinearSEFT(nn.Module):
 		self.reset()
 
 	def reset(self):
-		self.h = Linear(self.input_dims, self.input_dims,
-			in_dropout=self.in_dropout,
-			activation='linear',
-			bias=True,
-			)
-		self.g = Linear(self.input_dims, self.input_dims,
-			out_dropout=self.out_dropout,
-			activation='linear',
-			bias=False,
-			)
+		if not self.is_dummy():
+			self.h = Linear(self.input_dims, self.input_dims,
+				in_dropout=self.in_dropout,
+				activation='linear',
+				bias=True,
+				)
+			self.g = Linear(self.input_dims, self.input_dims,
+				out_dropout=self.out_dropout,
+				activation='linear',
+				bias=False,
+				)
+
+	def is_dummy(self):
+		return self.dummy
 
 	def __len__(self):
 		return utils.count_parameters(self)
@@ -65,11 +69,13 @@ class LinearSEFT(nn.Module):
 		assert len(x.shape)==3
 		assert len(onehot.shape)==2
 
-		# encz_bdict[f'encz'] = seq_utils.seq_last_element(encz, onehot) # (b,t,f) > (b,f)
-		# encz_bdict[f'encz'] = seq_utils.seq_avg_pooling(encz, onehot) # (b,t,f) > (b,f)
-		hx = seq_avg_pooling(torch.relu(self.h(x)), onehot) # (b,t,f) > (b,f)
-		gx = self.g(hx) # (b,f) > (b,f)
-		return gx
+		if self.is_dummy():
+			return seq_last_element(x, onehot) # (b,t,f) > (b,f)
+			# return seq_avg_pooling(x, onehot) # (b,t,f) > (b,f)
+		else:
+			hx = seq_avg_pooling(torch.relu(self.h(x)), onehot) # (b,t,f) > (b,f)
+			gx = self.g(hx) # (b,f) > (b,f)
+			return gx
 
 ###################################################################################################################################################
 

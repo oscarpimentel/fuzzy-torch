@@ -16,8 +16,9 @@ class FTFile(PFile):
 		):
 		file = None
 		if not model is None:
+			state_dict = deepcopy(model.state_dict())
 			file = {
-				'state_dict':deepcopy(model.state_dict()), # needs deepcopy, not just copy
+				'state_dict':state_dict, # needs deepcopy, not just copy
 				'lmonitors':{lmonitor.name:lmonitor.get_save_dict() for lmonitor in lmonitors},
 				}
 		super().__init__(filedir,

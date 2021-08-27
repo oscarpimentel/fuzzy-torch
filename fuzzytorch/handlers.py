@@ -368,7 +368,15 @@ class ModelTrainHandler(object):
 		prints.print_blue(f'> loading model={to_load_filedir}')
 
 		loaded_dic = torch.load(to_load_filedir, map_location=self.device)
-		self.model.load_state_dict(loaded_dic['state_dict'])
+		state_dict = loaded_dic['state_dict']
+
+		# fixme
+		keys = list(state_dict.keys())
+		for key in keys:
+			if key in ['autoencoder.encoder.ml_attn.g.self_attns.0.error_a', 'autoencoder.encoder.ml_attn.g.self_attns.0.error_b', 'autoencoder.encoder.ml_attn.r.self_attns.0.error_a', 'autoencoder.encoder.ml_attn.r.self_attns.0.error_b',]:
+				del state_dict[key]
+
+		self.model.load_state_dict(state_dict)
 		for lmonitor in self.lmonitors:
 			lmonitor.load_from_dict(loaded_dic['lmonitors'][lmonitor.name])
 			

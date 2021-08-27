@@ -389,6 +389,7 @@ class TimeSelfAttn(SelfAttn):
 		return x, scores
 
 ###################################################################################################################################################
+import fuzzytorch.models.rnn.basics as ft_rnn # fixme
 
 class MLTimeSelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, te_features, max_te_period,
@@ -454,6 +455,7 @@ class MLTimeSelfAttn(nn.Module):
 		print('te_film:',self.te_film)
 
 		self.self_attns = nn.ModuleList()
+		self.rnns = nn.ModuleList() # fixme
 		for k in range(0, len(self.embd_dims_list)-1):
 			input_dims_ = self.embd_dims_list[k]
 			output_dims_ = self.embd_dims_list[k+1]
@@ -470,6 +472,8 @@ class MLTimeSelfAttn(nn.Module):
 				)
 			self.self_attns += [self_attn]
 
+		self.rnn = ft_rnn.MLGRU(self.input_dims, self.input_dims, []) # fixme
+		print(self.rnn) # fixme
 		self.reset()
 
 	def reset(self):
@@ -519,7 +523,8 @@ class MLTimeSelfAttn(nn.Module):
 
 		x = self.te_film(x, time, onehot)
 		for k,self_attn in enumerate(self.self_attns):
-			x, scores = self_attn(x, onehot,
+			x, _ = self.rnn(x, onehot) # fixme
+			_, scores = self_attn(x, onehot, # fixme
 				mul_attn_mask,
 				return_only_actual_scores,
 				**kwargs)
