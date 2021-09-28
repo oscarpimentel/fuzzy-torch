@@ -32,6 +32,7 @@ class ResidualBlockHandler(nn.Module):
 		norm_mode='none',
 		activation='linear',
 		residual_dropout=0.0,
+		ignore_f=False, # used for ablations
 		**kwargs):
 		super().__init__()
 		### CHECKS
@@ -43,6 +44,7 @@ class ResidualBlockHandler(nn.Module):
 		self.norm_mode = norm_mode
 		self.activation = activation
 		self.residual_dropout = residual_dropout
+		self.ignore_f = ignore_f
 		self.reset()
 
 	def reset(self):
@@ -84,7 +86,10 @@ class ResidualBlockHandler(nn.Module):
 			fx_args = self.f(x, *f_args, **f_kwargs)
 
 		fx = fx_args[0] if f_returns_tuple else fx_args
-		new_x = x+self.residual_dropout_f(fx) # x:=x+f(x)
+		if self.ignore_f:
+			new_x = x
+		else:
+			new_x = x+self.residual_dropout_f(fx) # x:=x+f(x)
 
 		if self.norm_mode=='post_norm':
 			new_x = self.norm_x(new_x, norm_args=norm_args, norm_kwargs=norm_kwargs)
