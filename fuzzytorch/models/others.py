@@ -231,52 +231,55 @@ class TimeFILM(nn.Module):
 
 	def reset(self):
 		self.dummy = self.te_features<=0
-		self.te_features = 2 if self.is_dummy() else self.te_features # patch
-		linear_kwargs = {
-			'activation':'linear',
-			#'bias':self.bias,
-			}
-		assert self.input_dims>0
-		self.temporal_encoder = TemporalEncoder(self.te_features, self.max_te_period,
-			time_noise_window=self.time_noise_window,
-			mod_dropout=self.mod_dropout,
-			)
-		#self.te_mod_beta = TemporalEncoder(self.te_features, self.max_te_period)
-		print('temporal_encoder:',self.temporal_encoder)
+		if not self.is_dummy():
+			linear_kwargs = {
+				'activation':'linear',
+				#'bias':self.bias,
+				}
+			assert self.input_dims>0
+			self.temporal_encoder = TemporalEncoder(self.te_features, self.max_te_period,
+				time_noise_window=self.time_noise_window,
+				mod_dropout=self.mod_dropout,
+				)
+			#self.te_mod_beta = TemporalEncoder(self.te_features, self.max_te_period)
+			print('temporal_encoder:',self.temporal_encoder)
+			self.gamma_beta_f = Linear(self.te_features, self.fourier_dims, split_out=2, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
 
-		self.gamma_beta_f = Linear(self.te_features, self.fourier_dims, split_out=2, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
 		self.cnn_pad = nn.ConstantPad1d([self.kernel_size-1, 0], 0)
 		self.cnn = nn.Conv1d(self.fourier_dims, self.input_dims, kernel_size=self.kernel_size, padding=0, bias=True)
 
-		# if self.uses_norm:
-		self.norm = torch.nn.LayerNorm([self.input_dims])
+		if self.uses_norm:
+			self.norm = torch.nn.LayerNorm([self.input_dims])
 
 		self.activation_f = non_linear.get_activation(self.activation)
-		self.residual_dropout_f = nn.Dropout(self.residual_dropout)
+		self.residual_dropout_f = nn.Dropout(self.residual_dropout) # not used
 
 	def get_info(self):
-		assert not self.training, 'you can not access this method in training mode'
-		d = {
-			'weight':tensor_to_numpy(self.gamma_beta_f.linear.weight), # (2K,2M)
-			}
-		d.update(self.temporal_encoder.get_info())
-		return d
+		if not self.is_dummy():
+			assert not self.training, 'you can not access this method in training mode'
+			d = {
+				'weight':tensor_to_numpy(self.gamma_beta_f.linear.weight), # (2K,2M)
+				}
+			d.update(self.temporal_encoder.get_info())
+			return d
+		else:
+			return {}
 
 	def is_dummy(self):
 		return self.dummy
 
 	def f_mod(self, x, time, onehot):
-		temporal_encoding = self.temporal_encoder(time) # (b,t,2M)
-		gamma, beta = self.gamma_beta_f(temporal_encoding) # (b,t,2M)>(b,t,2K)>[(b,t,K),(b,t,K)]
-
-		if self.mod_dropout>0:
-			valid_mask = torch.bernoulli(torch.full(gamma.shape, fill_value=self.mod_dropout, device=gamma.device)).bool()
-			gamma = gamma.masked_fill(valid_mask, 0)
-			beta = beta.masked_fill(valid_mask, 0)
-
 		if self.is_dummy():
 			x_mod = x*1+0 # for ablation
 		else:
+			temporal_encoding = self.temporal_encoder(time) # (b,t,2M)
+			gamma, beta = self.gamma_beta_f(temporal_encoding) # (b,t,2M)>(b,t,2K)>[(b,t,K),(b,t,K)]
+
+			if self.mod_dropout>0:
+				valid_mask = torch.bernoulli(torch.full(gamma.shape, fill_value=self.mod_dropout, device=gamma.device)).bool()
+				gamma = gamma.masked_fill(valid_mask, 0)
+				beta = beta.masked_fill(valid_mask, 0)
+
 			x_mod = x*gamma+beta # element-wise modulation
 
 		if self.uses_norm:

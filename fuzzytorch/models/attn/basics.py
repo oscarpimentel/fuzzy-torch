@@ -85,7 +85,7 @@ class SelfAttn(nn.Module):
 		**kwargs):
 		super().__init__()
 		### CHECKS
-		assert input_dims%num_heads==0
+		assert num_heads==0 or input_dims%num_heads==0
 		assert in_dropout>=0 and in_dropout<=1
 		assert out_dropout>=0 and out_dropout<=1
 		assert attn_dropout>=0 and attn_dropout<=1
@@ -108,26 +108,28 @@ class SelfAttn(nn.Module):
 		self.reset()
 
 	def reset(self):
-		self.head_dim = self.input_dims//self.num_heads
+		self.dummy = self.num_heads==0
+		self.head_dim = 0 if self.is_dummy() else self.input_dims//self.num_heads
 		self.in_dropout_f = nn.Dropout(self.in_dropout)
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
 		self.activation_f = non_linear.get_activation(self.activation)
 		self.bypass_mlp = self.mlp_k is None
 
 		### attn
-		self.self_mh_attn = SelfAttnWrapper(MultiheadAttention(self.input_dims, self.num_heads,
-			dropout=self.attn_dropout,
-			bias=self.bias,
-			add_bias_kv=False,
-			add_zero_attn=False,
-			kdim=None,
-			vdim=None,
-			))
-		self.attn_res_block = ResidualBlockHandler(self.self_mh_attn,
-			torch.nn.LayerNorm([self.input_dims]),
-			norm_mode=self.norm_mode,
-			residual_dropout=self.residual_dropout,
-			)
+		if not self.is_dummy():
+			self.self_mh_attn = SelfAttnWrapper(MultiheadAttention(self.input_dims, self.num_heads,
+				dropout=self.attn_dropout,
+				bias=self.bias,
+				add_bias_kv=False,
+				add_zero_attn=False,
+				kdim=None,
+				vdim=None,
+				))
+			self.attn_res_block = ResidualBlockHandler(self.self_mh_attn,
+				torch.nn.LayerNorm([self.input_dims]),
+				norm_mode=self.norm_mode,
+				residual_dropout=self.residual_dropout,
+				)
 
 		### mlp
 		if self.bypass_mlp:
@@ -146,6 +148,9 @@ class SelfAttn(nn.Module):
 				norm_mode=self.norm_mode,
 				residual_dropout=self.residual_dropout,
 				)
+
+	def is_dummy(self):
+		return self.dummy
 
 	def register_src_mask(self, max_curve_length, device):
 		max_curve_length_changed = not max_curve_length==self.max_curve_length
@@ -211,7 +216,12 @@ class SelfAttn(nn.Module):
 			'attn_mask':self.src_mask,
 			# 'mul_attn_mask':mul_attn_mask,
 			}
-		x, scores = self.attn_res_block(x, f_returns_tuple=True, f_kwargs=mhattn_kwargs)
+		if self.is_dummy():
+			b,h,t,qt = x.shape[0], 1, x.shape[1], x.shape[1]
+			scores = torch.zeros(size=(b,h,t,qt), device=x.device) # (b,h,t,qt)
+		else:
+			x, scores = self.attn_res_block(x, f_returns_tuple=True, f_kwargs=mhattn_kwargs)
+
 		scores = scores.detach()
 
 		### MLP
