@@ -23,6 +23,7 @@ DEFAULT_NON_LINEAR_ACTIVATION = _C.DEFAULT_NON_LINEAR_ACTIVATION
 NORM_MODE = 'none' # none pre_norm post_norm
 MLP_K = 1
 NUM_HEADS = 4
+REMOVES_TIME_OFFSET = False
 
 ###################################################################################################################################################
 
@@ -416,7 +417,7 @@ class MLTimeSelfAttn(nn.Module):
 		kernel_size=1,
 		time_noise_window=0,
 		fourier_dims=None,
-		mod_dropout=0,
+		removes_time_offset=REMOVES_TIME_OFFSET,
 		**kwargs):
 		super().__init__()
 
@@ -447,7 +448,7 @@ class MLTimeSelfAttn(nn.Module):
 		self.kernel_size = kernel_size
 		self.time_noise_window = time_noise_window
 		self.fourier_dims = fourier_dims
-		self.mod_dropout = mod_dropout
+		self.removes_time_offset = removes_time_offset
 
 		activations = [activation]*(len(self.embd_dims_list)-1) # create activations along
 		if not self.last_activation is None:
@@ -459,7 +460,7 @@ class MLTimeSelfAttn(nn.Module):
 			time_noise_window=self.time_noise_window,
 			fourier_dims=self.fourier_dims,
 			residual_dropout=self.residual_dropout,
-			mod_dropout=self.mod_dropout,
+			removes_time_offset=self.removes_time_offset,
 			)
 		print('te_film:',self.te_film)
 
