@@ -400,6 +400,7 @@ class TimeSelfAttn(SelfAttn):
 		return x, scores
 
 ###################################################################################################################################################
+import fuzzytorch.models.rnn.basics as ft_rnn # sanity_check
 
 class MLTimeSelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, te_features, max_te_period,
@@ -481,6 +482,7 @@ class MLTimeSelfAttn(nn.Module):
 				)
 			self.self_attns += [self_attn]
 
+		self.rnn = ft_rnn.MLGRU(self.input_dims, self.input_dims, embd_dims_list); print('RNN SANITY CHECK', self.rnn) # sanity_check
 		self.reset()
 
 	def reset(self):
@@ -496,7 +498,7 @@ class MLTimeSelfAttn(nn.Module):
 	def __repr__(self):
 		resume = ''
 		for k,self_attn in enumerate(self.self_attns):
-			resume += f'  ({k}) - {str(self_attn)}\n'
+			resume += f' ({k}) - {str(self_attn)}\n'
 		txt = f'MLTimeSelfAttn(\n{resume})({len(self):,}[p])'
 		return txt
 
@@ -529,8 +531,10 @@ class MLTimeSelfAttn(nn.Module):
 		assert len(time.shape)==2
 
 		x = self.te_film(x, time, onehot)
+		x, _ = self.rnn(x, onehot) # sanity_check
 		for k,self_attn in enumerate(self.self_attns):
-			x, scores = self_attn(x, onehot,
+			_, scores = self_attn(x, onehot, # sanity_check
+			# x, scores = self_attn(x, onehot,
 				mul_attn_mask,
 				return_only_actual_scores,
 				**kwargs)
