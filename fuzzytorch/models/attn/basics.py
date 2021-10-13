@@ -56,16 +56,16 @@ class SelfAttnWrapper(nn.Module):
 		'''
 		wrapper for self-attention operation
 		'''
-		queries = x.permute(1,0,2) if self.uses_permutation else x # (b,t,f) > (t,b,f)
-		keys = x.permute(1,0,2) if self.uses_permutation else x # (b,t,f) > (t,b,f)
-		values = x.permute(1,0,2) if self.uses_permutation else x # (b,t,f) > (t,b,f)
+		queries = x.permute(1,0,2) if self.uses_permutation else x # (n,t,f) > (t,n,f)
+		keys = x.permute(1,0,2) if self.uses_permutation else x # (n,t,f) > (t,n,f)
+		values = x.permute(1,0,2) if self.uses_permutation else x # (n,t,f) > (t,n,f)
 		if kwargs.get('need_weights', True):
-			contexts, scores = self.attn_module(queries, keys, values, **kwargs) # (t,b,f) > (t,b,f)
-			contexts = contexts.permute(1,0,2) if self.uses_permutation else contexts # (t,b,f) > (b,t,f)
+			contexts, scores = self.attn_module(queries, keys, values, **kwargs) # (t,n,f) > (t,n,f)
+			contexts = contexts.permute(1,0,2) if self.uses_permutation else contexts # (t,n,f) > (n,t,f)
 			return contexts, scores
 		else:
-			contexts = self.attn_module(queries, keys, values, **kwargs) # (t,b,f) > (t,b,f)
-			contexts = contexts.permute(1,0,2) if self.uses_permutation else contexts # (t,b,f) > (b,t,f)
+			contexts = self.attn_module(queries, keys, values, **kwargs) # (t,n,f) > (t,n,f)
+			contexts = contexts.permute(1,0,2) if self.uses_permutation else contexts # (t,n,f) > (n,t,f)
 			return contexts
 
 ###################################################################################################################################################
@@ -118,15 +118,16 @@ class SelfAttn(nn.Module):
 
 		### attn
 		if not self.is_dummy():
-			self.self_mh_attn = SelfAttnWrapper(MultiheadAttention(self.input_dims, self.num_heads,
+			mhattn = MultiheadAttention(self.input_dims, self.num_heads,
 				dropout=self.attn_dropout,
 				bias=self.bias,
 				add_bias_kv=False,
 				add_zero_attn=False,
 				kdim=None,
 				vdim=None,
-				))
-			self.attn_res_block = ResidualBlockHandler(self.self_mh_attn,
+				)
+			self.self_mhattn = SelfAttnWrapper(mhattn)
+			self.attn_res_block = ResidualBlockHandler(self.self_mhattn,
 				torch.nn.LayerNorm([self.input_dims]),
 				norm_mode=self.norm_mode,
 				residual_dropout=self.residual_dropout,
@@ -157,9 +158,7 @@ class SelfAttn(nn.Module):
 		max_curve_length_changed = not max_curve_length==self.max_curve_length
 		if max_curve_length_changed:
 			self.max_curve_length = max_curve_length
-			#self.register_buffer('src_mask', attn_utils.generate_square_subsequent_mask(self.max_curve_length).to(device))
 			self.src_mask = attn_utils.generate_square_subsequent_mask(self.max_curve_length).to(device) # slow to use .to() but it's not always
-			#print(self.src_mask.device)
 
 	def get_output_dims(self):
 		return self.output_dims
@@ -198,13 +197,13 @@ class SelfAttn(nn.Module):
 		'''
 		Parameters
 		----------
-		x (b,t,f): input tensor.
-		onehot (b,t)
+		x (n,t,f): input tensor.
+		onehot (n,t)
 
 		Return
 		----------
-		x: (b,t,out): output tensor.
-		scores: (b,h,t,qt)
+		x: (n,t,out): output tensor.
+		scores: (n,h,t,qt)
 		'''
 		self.register_src_mask(x.shape[1], x.device)
 		new_onehot = onehot.clone()
@@ -212,15 +211,14 @@ class SelfAttn(nn.Module):
 		x = self.in_dropout_f(x)
 
 		### attn
-		mhattn_kwargs = {
-			'key_padding_mask':~new_onehot,
-			'attn_mask':self.src_mask,
-			# 'mul_attn_mask':mul_attn_mask,
-			}
 		if self.is_dummy():
-			b,h,t,qt = x.shape[0], 1, x.shape[1], x.shape[1]
-			scores = torch.zeros(size=(b,h,t,qt), device=x.device) # (b,h,t,qt)
+			n,h,t,qt = x.shape[0], 1, x.shape[1], x.shape[1]
+			scores = torch.zeros(size=(n,h,t,qt), device=x.device) # (n,h,t,qt)
 		else:
+			mhattn_kwargs = {
+				'key_padding_mask':~new_onehot, # attn ignore the True values
+				'attn_mask':self.src_mask,
+				}
 			x, scores = self.attn_res_block(x, f_returns_tuple=True, f_kwargs=mhattn_kwargs)
 
 		scores = scores.detach()
@@ -239,11 +237,11 @@ class SelfAttn(nn.Module):
 		if return_only_actual_scores:
 			scores_size = scores.size()
 			if len(scores_size)==4: # from clone version
-				b,h,t,qt = scores_size
-				scores = scores.permute(0,2,1,3) # (b,h,t,qt) > (b,t,h,qt)
-				scores = scores.reshape(b,t,h*qt)
+				n,h,t,qt = scores_size
+				scores = scores.permute(0,2,1,3) # (n,h,t,qt) > (n,t,h,qt)
+				scores = scores.reshape(n,t,h*qt)
 				scores = seq_utils.seq_last_element(scores, onehot) # last element
-				scores = scores.reshape(b,h,qt)
+				scores = scores.reshape(n,h,qt)
 			else: # from source version
 				pass # for now...
 
@@ -331,13 +329,13 @@ class MLSelfAttn(nn.Module):
 		'''
 		Parameters
 		----------
-		x (b,t,in): input tensor.
-		onehot (b,t)
+		x (n,t,in): input tensor.
+		onehot (n,t)
 
 		Return
 		----------
-		x: (b,t,out): output tensor.
-		layers_scores: (b,h,t,qt)
+		x: (n,t,out): output tensor.
+		layers_scores: (n,h,t,qt)
 		'''
 		assert onehot.dtype==torch.bool
 		assert len(onehot.shape)==2
@@ -419,6 +417,7 @@ class MLTimeSelfAttn(nn.Module):
 		time_noise_window=0,
 		fourier_dims=None,
 		removes_time_offset=REMOVES_TIME_OFFSET,
+		hardcodes_rnn=False,
 		**kwargs):
 		super().__init__()
 
@@ -450,6 +449,7 @@ class MLTimeSelfAttn(nn.Module):
 		self.time_noise_window = time_noise_window
 		self.fourier_dims = fourier_dims
 		self.removes_time_offset = removes_time_offset
+		self.hardcodes_rnn = hardcodes_rnn
 
 		activations = [activation]*(len(self.embd_dims_list)-1) # create activations along
 		if not self.last_activation is None:
@@ -482,7 +482,9 @@ class MLTimeSelfAttn(nn.Module):
 				)
 			self.self_attns += [self_attn]
 
-		self.rnn = ft_rnn.MLGRU(self.input_dims, self.input_dims, embd_dims_list); print('RNN SANITY CHECK', self.rnn) # sanity_check
+		if self.hardcodes_rnn: # sanity_check
+			self.rnn = ft_rnn.MLGRU(self.input_dims, self.output_dims, embd_dims_list)
+			print('RNN SANITY CHECK', self.rnn)
 		self.reset()
 
 	def reset(self):
@@ -515,14 +517,14 @@ class MLTimeSelfAttn(nn.Module):
 		'''
 		Parameters
 		----------
-		x (b,t,in): input tensor.
-		onehot (b,t)
-		time (b,t)
+		x (n,t,in): input tensor.
+		onehot (n,t)
+		time (n,t)
 
 		Return
 		----------
-		x: (b,t,out): output tensor.
-		scores: (b,h,t,qt)
+		x: (n,t,out): output tensor.
+		scores: (n,h,t,qt)
 		'''
 		assert onehot.dtype==torch.bool
 		assert len(onehot.shape)==2
@@ -531,11 +533,17 @@ class MLTimeSelfAttn(nn.Module):
 		assert len(time.shape)==2
 
 		x = self.te_film(x, time, onehot)
-		x, _ = self.rnn(x, onehot) # sanity_check
-		for k,self_attn in enumerate(self.self_attns):
-			_, scores = self_attn(x, onehot, # sanity_check
-			# x, scores = self_attn(x, onehot,
-				mul_attn_mask,
-				return_only_actual_scores,
-				**kwargs)
+		if self.hardcodes_rnn: # sanity_check
+			x, _ = self.rnn(x, onehot) 
+			for k,self_attn in enumerate(self.self_attns):
+				_, scores = self_attn(x, onehot,
+					mul_attn_mask,
+					return_only_actual_scores,
+					**kwargs)
+		else:
+			for k,self_attn in enumerate(self.self_attns):
+				x, scores = self_attn(x, onehot,
+					mul_attn_mask,
+					return_only_actual_scores,
+					**kwargs)
 		return x, scores
