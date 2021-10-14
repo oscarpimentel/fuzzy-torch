@@ -21,8 +21,8 @@ import numpy as np
 
 DEFAULT_NON_LINEAR_ACTIVATION = _C.DEFAULT_NON_LINEAR_ACTIVATION
 NORM_MODE = 'none' # none pre_norm post_norm
-MLP_K = 1
 NUM_HEADS = 4
+MLP_K = 1
 REMOVES_TIME_OFFSET = False
 
 ###################################################################################################################################################
@@ -238,10 +238,10 @@ class SelfAttn(nn.Module):
 			scores_size = scores.size()
 			if len(scores_size)==4: # from clone version
 				n,h,t,qt = scores_size
-				scores = scores.permute(0,2,1,3) # (n,h,t,qt) > (n,t,h,qt)
-				scores = scores.reshape(n,t,h*qt)
-				scores = seq_utils.seq_last_element(scores, onehot) # last element
-				scores = scores.reshape(n,h,qt)
+				scores = scores.permute(0,2,1,3) # (n,h,t,qt)>(n,t,h,qt)
+				scores = scores.reshape(n,t,h*qt) # (n,t,h,qt)>(n,t,h*qt)
+				scores = seq_utils.seq_last_element(scores, onehot) # last element (n,t,h*qt)>(n,h*qt)
+				scores = scores.reshape(n,h,qt) # (n,h,qt) should sum 1 in dim qt
 			else: # from source version
 				pass # for now...
 
