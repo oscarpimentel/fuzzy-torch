@@ -15,6 +15,7 @@ import math
 from .attn.batch_norms import LayerNorm, MaskedBatchNorm1d
 
 REMOVES_TIME_OFFSET = False
+WS_PHASES_REQUIRES_GRAD = False
 
 ###################################################################################################################################################
 
@@ -72,7 +73,7 @@ class TemporalEncoder(nn.Module):
 		min_te_period=None, # 2 None
 		time_noise_window=0, # regularization in time units
 		init_k_exp=.5,
-		ws_phases_requires_grad=False,
+		ws_phases_requires_grad=WS_PHASES_REQUIRES_GRAD,
 		removes_time_offset=REMOVES_TIME_OFFSET,
 		**kwargs):
 		super().__init__()
@@ -187,8 +188,7 @@ class TemporalEncoder(nn.Module):
 		te_phases = self.get_te_phases()
 		te_scales = self.get_te_scales()
 		encoding = _vectorized_te(te_ws, te_phases, te_scales, time)
-		# encoding = _te(te_ws, te_phases, te_scales, time)
-		#print(encoding.shape, encoding.device)
+		# print('periods', self.get_te_periods())
 		return encoding
 
 	def __len__(self):
@@ -269,7 +269,8 @@ class TimeFILM(nn.Module):
 		else:
 			temporal_encoding = self.temporal_encoder(time) # (n,t,2M)
 			gamma, beta = self.gamma_beta_f(temporal_encoding) # (n,t,2M)>(n,t,2K)>[(n,t,K),(n,t,K)]
-			x_mod = x*gamma+beta # element-wise modulation
+			# x_mod = x*gamma+beta # element-wise modulation
+			x_mod = x*torch.tanh(gamma)+beta # element-wise modulation
 
 		if self.uses_norm:
 			x_mod = self.norm(x_mod)

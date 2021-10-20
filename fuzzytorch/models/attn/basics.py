@@ -20,7 +20,7 @@ from .. import seq_utils as seq_utils
 import numpy as np
 
 DEFAULT_NON_LINEAR_ACTIVATION = _C.DEFAULT_NON_LINEAR_ACTIVATION
-NORM_MODE = 'none' # none pre_norm post_norm
+NORM_MODE = 'pre_norm' # none pre_norm post_norm
 NUM_HEADS = 4
 MLP_K = 1
 REMOVES_TIME_OFFSET = False

@@ -10,6 +10,7 @@ from . import utils
 from fuzzytools import strings as strings
 
 DEFAULT_NON_LINEAR_ACTIVATION = _C.DEFAULT_NON_LINEAR_ACTIVATION
+NORM_MODE = 'pre_norm' # none pre_norm post_norm
 
 ###################################################################################################################################################
 
@@ -29,7 +30,7 @@ class DummyModule(nn.Module):
 class ResidualBlockHandler(nn.Module):
 	def __init__(self, f,
 		norm=None,
-		norm_mode='none',
+		norm_mode=NORM_MODE,
 		activation='linear',
 		residual_dropout=0.0,
 		ignore_f=False, # used for ablations
@@ -81,7 +82,8 @@ class ResidualBlockHandler(nn.Module):
 		auxiliar class for residual connection
 		'''
 		if self.norm_mode=='pre_norm':
-			fx_args = self.f(self.norm_x(x, norm_args=norm_args, norm_kwargs=norm_kwargs), *f_args, **f_kwargs)
+			norm_x = self.norm_x(x, norm_args=norm_args, norm_kwargs=norm_kwargs)
+			fx_args = self.f(norm_x, *f_args, **f_kwargs)
 		else:
 			fx_args = self.f(x, *f_args, **f_kwargs)
 
@@ -89,7 +91,7 @@ class ResidualBlockHandler(nn.Module):
 		if self.ignore_f:
 			new_x = x
 		else:
-			new_x = x+self.residual_dropout_f(fx) # x:=x+f(x)
+			new_x = x+self.residual_dropout_f(fx) # x=x+f(x)
 
 		if self.norm_mode=='post_norm':
 			new_x = self.norm_x(new_x, norm_args=norm_args, norm_kwargs=norm_kwargs)
