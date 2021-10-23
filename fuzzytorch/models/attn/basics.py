@@ -20,7 +20,8 @@ from .. import seq_utils as seq_utils
 import numpy as np
 
 DEFAULT_NON_LINEAR_ACTIVATION = _C.DEFAULT_NON_LINEAR_ACTIVATION
-NORM_MODE = 'pre_norm' # none pre_norm post_norm
+MHSELFATTN_NORM_MODE = 'pre_norm' # none pre_norm post_norm
+MLP_NORM_MODE = 'none' # none pre_norm post_norm
 NUM_HEADS = 4
 MLP_K = 1
 REMOVES_TIME_OFFSET = False
@@ -82,7 +83,8 @@ class SelfAttn(nn.Module):
 		residual_dropout=0.0,
 		bias=True,
 		mlp_k=MLP_K,
-		norm_mode=NORM_MODE,
+		mhselfattn_norm_mode=MHSELFATTN_NORM_MODE,
+		mlp_norm_mode=MLP_NORM_MODE,
 		**kwargs):
 		super().__init__()
 		### CHECKS
@@ -105,7 +107,8 @@ class SelfAttn(nn.Module):
 		self.residual_dropout = residual_dropout
 		self.bias = bias
 		self.mlp_k = mlp_k
-		self.norm_mode = norm_mode
+		self.mhselfattn_norm_mode = mhselfattn_norm_mode
+		self.mlp_norm_mode = mlp_norm_mode
 		self.reset()
 
 	def reset(self):
@@ -129,7 +132,7 @@ class SelfAttn(nn.Module):
 			self.self_mhattn = SelfAttnWrapper(mhattn)
 			self.attn_res_block = ResidualBlockHandler(self.self_mhattn,
 				torch.nn.LayerNorm([self.input_dims]),
-				norm_mode=self.norm_mode,
+				norm_mode=self.mhselfattn_norm_mode,
 				residual_dropout=self.residual_dropout,
 				)
 
@@ -147,7 +150,7 @@ class SelfAttn(nn.Module):
 				)
 			self.mlp_res_block = ResidualBlockHandler(self.mlp,
 				torch.nn.LayerNorm([self.input_dims]),
-				norm_mode=self.norm_mode,
+				norm_mode=self.mlp_norm_mode,
 				residual_dropout=self.residual_dropout,
 				)
 
@@ -181,7 +184,8 @@ class SelfAttn(nn.Module):
 			'residual_dropout':self.residual_dropout,
 			'bias':self.bias,
 			'mlp_k':self.mlp_k,
-			'norm_mode':self.norm_mode,
+			'mhselfattn_norm_mode':self.mhselfattn_norm_mode,
+			'mlp_norm_mode':self.mlp_norm_mode,
 			}, ', ', '=')
 		return txt
 
