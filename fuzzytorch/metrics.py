@@ -37,15 +37,19 @@ class BatchMetric():
 		return f'{xstr(self.get_metric_item())}'
 
 	def __add__(self, other):
-		if other==0 or other is None:
-			return self
-		elif self==0 or self is None:
+		if self is None or self==0:
 			return other
-		else:
+
+		if other is None or other==0:
+			return self
+
+		if type(self)==BatchMetric and type(other)==BatchMetric:
 			new_batch_metric = torch.cat([self.batch_metric, other.batch_metric], dim=0) # (b1+b2)
 			new_batch_weights = None if (self.batch_weights is None or other.batch_weights is None) else torch.cat([self.batch_weights, other.batch_weights], dim=0) # (b1+b2)
 			new_metric = BatchMetric(new_batch_metric, new_batch_weights)
 			return new_metric
+
+		assert 0
 
 	def __radd__(self, other):
 		return self+other
@@ -101,60 +105,3 @@ class LossWrapper(FTMetric):
 
 		else:
 			raise Exception(f'invalid type')
-
-###################################################################################################################################################
-
-# def get_labels_accuracy(y_pred, y_target, labels):
-# 	labels_accuracies = []
-# 	for k in range(labels):
-# 		valid_idxs = torch.where(y_target==k)
-# 		y_pred_k = y_pred[valid_idxs]
-# 		y_target_k = y_target[valid_idxs]
-		
-# 		accuracies = (y_target_k==y_pred_k).float()*100
-# 		if len(valid_idxs[0])>0:
-# 			labels_accuracies.append(torch.mean(accuracies)[None])
-# 	return torch.cat(labels_accuracies)
-
-# ###################################################################################################################################################
-
-# class DummyAccuracy(FTMetric):
-# 	def __init__(self, name, **kwargs):
-# 		self.name = name
-
-# 	def __call__(self, tdict, **kwargs):
-# 		epoch = kwargs['_epoch']
-# 		y_target = tdict['target']['y']
-# 		y_pred = tdict['model']['y']
-
-# 		m = torch.ones((len(y_pred)))/y_pred.shape[-1]*100
-# 		return MetricResult(m)
-
-# class Accuracy(FTMetric):
-# 	def __init__(self, name,
-# 		target_is_onehot:bool=False,
-# 		balanced=False,
-# 		**kwargs):
-# 		self.name = name
-# 		self.target_is_onehot = target_is_onehot
-# 		self.balanced = balanced
-
-# 	def __call__(self, tdict, **kwargs):
-# 		epoch = kwargs['_epoch']
-# 		y_target = tdict['target']['y']
-# 		y_pred = tdict['model']['y']
-# 		labels = y_pred.shape[-1]
-
-# 		assert y_target.dtype==torch.long
-
-# 		if self.target_is_onehot:
-# 			assert y_pred.shape==y_target.shape
-# 			y_target = y_target.argmax(dim=-1)
-		
-# 		y_pred = y_pred.argmax(dim=-1)
-# 		assert y_pred.shape==y_target.shape
-# 		assert len(y_pred.shape)==1
-
-# 		accuracies = get_labels_accuracy(y_pred, y_target, labels) if self.balanced else torch.mean((y_pred==y_target).float()*100)[None] # (b) > (1)
-# 		#print(accuracies.shape)
-# 		return MetricResult(accuracies)

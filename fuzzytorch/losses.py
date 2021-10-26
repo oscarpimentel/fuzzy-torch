@@ -11,46 +11,6 @@ import pandas as pd
 
 ###################################################################################################################################################
 
-# def batch_xentropy_manual(y_pred, y_target,
-# 	class_weight=None,
-# 	):
-# 	assert y_pred.size()==y_target.size()
-# 	batch_loss = -torch.sum(y_target.float() * torch.log(y_pred+EPS), dim=-1) # (b,...,c) > (b,...)
-# 	return batch_loss # (b,...)
-
-# def batch_xentropy(y_pred, y_target,
-# 	model_output_is_with_softmax:bool=False,
-# 	target_is_onehot:bool=False,
-# 	class_weight=None,
-# 	):
-# 	# F.cross_entropy already uses softmax as preprocessing internally
-# 	# F.cross_entropy uses target as labels, not onehot
-# 	classes = y_pred.size()[-1]
-# 	no_classes_shape = y_pred.size()[:-1]
-# 	if target_is_onehot: # [[01],[10],[01],[01],[10]]
-# 		if model_output_is_with_softmax:
-# 			batch_loss = batch_xentropy_manual(y_pred, y_target) # (b,...,c) > (b,...) # ugly case
-# 		else:
-# 			assert y_pred.shape==y_target.shape
-# 			y_pred = y_pred.view(-1, classes)
-# 			y_target = y_target.view(-1, classes).argmax(dim=-1)
-# 			batch_loss = F.cross_entropy(y_pred, y_target, reduction='none') # (b,...,c) > (b)
-# 			batch_loss = batch_loss.view(*no_classes_shape)
-
-# 	else: # [0,1,3,4,2,0,1,1]
-# 		if model_output_is_with_softmax:
-# 			raise Exception('not implemented')
-# 		else:
-# 			assert y_pred.shape[0]==y_target.shape[0]
-# 			assert len(y_pred.shape)==2
-# 			assert len(y_target.shape)==1
-# 			batch_loss = F.cross_entropy(y_pred.view(-1, classes), y_target.view(-1), reduction='none', weight=class_weight) # (b,...,c) > (b)
-# 			batch_loss = batch_loss.view(*no_classes_shape)
-
-# 	return batch_loss # (b,...)
-
-###################################################################################################################################################
-
 def _check_batch(batch_loss):
 	assert len(batch_loss.shape)==1 # (b)
 	assert len(batch_loss)>0
@@ -117,11 +77,13 @@ class BatchLoss():
 			return f'{lv} ({txt})'
 
 	def __add__(self, other):
-		if other==0 or other is None:
-			return self
-		elif self==0 or self is None:
+		if self is None or self==0:
 			return other
-		else:
+
+		if other is None or other==0:
+			return self
+
+		if type(self)==BatchLoss and type(other)==BatchLoss:
 			new_batch_loss = torch.cat([self.batch_loss, other.batch_loss], dim=0) # (b1+b2)
 			new_batch_weights = None if (self.batch_weights is None or other.batch_weights is None) else torch.cat([self.batch_weights, other.batch_weights], dim=0) # (b1+b2)
 			new_loss = BatchLoss(new_batch_loss, new_batch_weights)
@@ -130,6 +92,8 @@ class BatchLoss():
 				new_loss.add_subloss(subloss_name, new_batch_subloss)
 			return new_loss
 
+		assert 0
+		
 	def __radd__(self, other):
 		return self+other
 
