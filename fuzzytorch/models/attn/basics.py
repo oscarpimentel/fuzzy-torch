@@ -167,7 +167,7 @@ class SelfAttn(nn.Module):
 		return self.output_dims
 
 	def __len__(self):
-		return utils.count_parameters(self)
+		return utils.get_nof_parameters(self)
 		
 	def extra_repr(self):
 		txt = strings.get_string_from_dict({
@@ -317,7 +317,7 @@ class MLSelfAttn(nn.Module):
 		return self.embd_dims_list
 
 	def __len__(self):
-		return utils.count_parameters(self)
+		return utils.get_nof_parameters(self)
 
 	def __repr__(self):
 		resume = ''
@@ -354,7 +354,7 @@ class MLSelfAttn(nn.Module):
 		return x, scores
 
 	def __len__(self):
-		return utils.count_parameters(self)
+		return utils.get_nof_parameters(self)
 
 	def __repr__(self):
 		resume = ''
@@ -499,7 +499,7 @@ class MLTimeSelfAttn(nn.Module):
 		return self.embd_dims_list
 
 	def __len__(self):
-		return utils.count_parameters(self)
+		return utils.get_nof_parameters(self)
 
 	def __repr__(self):
 		resume = ''

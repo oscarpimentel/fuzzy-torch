@@ -51,7 +51,7 @@ class LSTM(nn.Module):
 		return self.output_dims
 
 	def __len__(self):
-		return utils.count_parameters(self)
+		return utils.get_nof_parameters(self)
 		
 	def extra_repr(self):
 		txt = strings.get_string_from_dict({
@@ -122,7 +122,7 @@ class GRU(nn.Module):
 		return self.output_dims
 
 	def __len__(self):
-		return utils.count_parameters(self)
+		return utils.get_nof_parameters(self)
 		
 	def extra_repr(self):
 		txt = strings.get_string_from_dict({
@@ -241,7 +241,7 @@ class MLRNN(nn.Module):
 		return x, extra_info
 
 	def __len__(self):
-		return utils.count_parameters(self)
+		return utils.get_nof_parameters(self)
 
 	def __repr__(self):
 		resume = ''

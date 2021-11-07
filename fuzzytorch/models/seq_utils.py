@@ -10,6 +10,11 @@ from .basics import MLP, Linear
 from fuzzytools import strings as strings
 from . import utils
 
+PADDING_VALUE = 0
+EMPTY_SEQ_VALUE = PADDING_VALUE
+INF = 1e32
+EPS = _C.EPS
+
 ###################################################################################################################################################
 
 class LinearSEFT(nn.Module):
@@ -46,7 +51,7 @@ class LinearSEFT(nn.Module):
 		return self.dummy
 
 	def __len__(self):
-		return utils.count_parameters(self)
+		return utils.get_nof_parameters(self)
 
 	def extra_repr(self):
 		txt = strings.get_string_from_dict({
@@ -111,7 +116,7 @@ def get_seq_onehot_mask(seqlengths, max_seqlength,
 ###################################################################################################################################################
 
 def seq_clean(x, onehot,
-	padding_value=0,
+	padding_value=PADDING_VALUE,
 	):
 	'''
 	x (b,t,f)
@@ -179,7 +184,7 @@ def _seq_dtimes(times, onehot):
 	return dtimes
 
 def seq_avg_pooling(x, onehot,
-	empty_seq_value=0,
+	empty_seq_value=EMPTY_SEQ_VALUE,
 	):
 	'''
 	x (b,t,f)
@@ -194,7 +199,7 @@ def seq_avg_pooling(x, onehot,
 	return x
 
 def seq_sum_pooling(x, onehot,
-	empty_seq_value=0,
+	empty_seq_value=EMPTY_SEQ_VALUE,
 	):
 	'''
 	x (b,t,f)
@@ -209,7 +214,7 @@ def seq_sum_pooling(x, onehot,
 	return x
 
 def seq_last_element(x, onehot,
-	empty_seq_value=0,
+	empty_seq_value=EMPTY_SEQ_VALUE,
 	):
 	'''
 	x (b,t,f)
@@ -227,8 +232,8 @@ def seq_last_element(x, onehot,
 	return last_x
 
 def seq_min_pooling(x, onehot,
-	empty_seq_value=0,
-	inf=1e16,
+	empty_seq_value=EMPTY_SEQ_VALUE,
+	inf=INF,
 	):
 	'''
 	x (b,t,f)
@@ -244,8 +249,8 @@ def seq_min_pooling(x, onehot,
 	return x
 
 def seq_max_pooling(x, onehot,
-	empty_seq_value=0,
-	inf=1e16,
+	empty_seq_value=EMPTY_SEQ_VALUE,
+	inf=INF,
 	):
 	'''
 	x (b,t,f)
@@ -261,9 +266,9 @@ def seq_max_pooling(x, onehot,
 	return x
 
 def seq_min_max_norm(x, onehot,
-	padding_value=0,
+	padding_value=PADDING_VALUE,
 	zero_diff_value=1,
-	eps=_C.EPS,
+	eps=EPS,
 	):
 	'''
 	x (b,t,f)
@@ -288,9 +293,9 @@ def seq_min_max_norm(x, onehot,
 ###################################################################################################################################################
 
 def seq_avg_norm(x, onehot, # FIXME
-	padding_value=0,
+	padding_value=PADDING_VALUE,
 	zero_diff_value=1,
-	eps=_C.EPS,
+	eps=EPS,
 	):
 	'''
 	x (b,t,f)
@@ -299,13 +304,13 @@ def seq_avg_norm(x, onehot, # FIXME
 	b,t,f = _check(x, onehot)
 	assert torch.all(x>=0)
 
-	avg_ = seq_avg_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
-	return x/(avg_+_C.EPS)
+	_avg = seq_avg_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
+	return x/(_avg+eps)
 
 def seq_sum_norm(x, onehot, # FIXME
-	padding_value=0,
+	padding_value=PADDING_VALUE,
 	zero_diff_value=1,
-	eps=_C.EPS,
+	eps=EPS,
 	):
 	'''
 	x (b,t,f)
@@ -314,8 +319,8 @@ def seq_sum_norm(x, onehot, # FIXME
 	b,t,f = _check(x, onehot)
 	assert torch.all(x>=0)
 
-	sum_ = seq_sum_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
-	return x/(sum_+_C.EPS)
+	_sum = seq_sum_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
+	return x/(_sum+eps)
 
 ###################################################################################################################################################
 
@@ -338,7 +343,7 @@ def seq_index_mapping_(source, idxs, output,
 	output.scatter_(dim, fixed_indexs, source)
 
 def serial_to_parallel(x, onehot,
-	padding_value=0,
+	padding_value=PADDING_VALUE,
 	):
 	'''
 	x (b,t,f)
@@ -355,7 +360,7 @@ def serial_to_parallel(x, onehot,
 	return new_x[:,:-1,:]
 
 def parallel_to_serial(list_x, s_onehot,
-	padding_value=0,
+	padding_value=PADDING_VALUE,
 	):
 	'''
 	list_x list[(b,t,f)]
@@ -414,7 +419,7 @@ def get_random_onehot(x, modes):
 
 
 def get_seq_clipped_shape(x, new_len,
-	padding_value=0,
+	padding_value=PADDING_VALUE,
 	):
 	'''
 	Used in dataset creation

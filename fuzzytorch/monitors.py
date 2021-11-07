@@ -104,7 +104,7 @@ class LossMonitor(object):
 	def add_loss_history_k(self, loss,
 		dt=0,
 		):
-		if self.counter_k.check('k'):
+		if self.counter_k.check_counter_name_upper_bound('k'):
 			assert isinstance(loss, ft_losses.BatchLoss)
 			d = loss.get_info()
 			#index = self.counter_k.get_global_count()
@@ -127,7 +127,7 @@ class LossMonitor(object):
 		dt=0,
 		set_name=None,
 		):
-		if self.counter_epoch.check('val_epoch'):
+		if self.counter_epoch.check_counter_name_upper_bound('val_epoch'):
 			assert isinstance(loss, ft_losses.BatchLoss)
 			d = loss.get_info()
 			#index = self.counter_epoch.get_global_count()
@@ -142,7 +142,7 @@ class LossMonitor(object):
 		dt=0,
 		set_name=None,
 		):
-		if self.counter_epoch.check('val_epoch'):
+		if self.counter_epoch.check_counter_name_upper_bound('val_epoch'):
 			d = {}
 			for mn in metrics_dict.keys():
 				metric = metrics_dict[mn]
@@ -168,7 +168,7 @@ class LossMonitor(object):
 	def epoch_update(self):
 		self.optimizer.update()
 		self.counter_epoch.update()
-		if self.counter_epoch.check('earlystop_epoch'):
+		if self.counter_epoch.check_counter_name_upper_bound('earlystop_epoch'):
 			raise ex.TrainingInterruptedError()
 
 	def set_last_saved_filedir(self, last_saved_filedir):
@@ -184,10 +184,10 @@ class LossMonitor(object):
 		self.optimizer.eval()
 
 	def needs_evaluation(self):
-		return self.counter_epoch.check('val_epoch')
+		return self.counter_epoch.check_counter_name_upper_bound('val_epoch')
 
 	def reset_early_stop(self):
-		self.counter_epoch.reset_cn('earlystop_epoch')
+		self.counter_epoch.reset_counter_name('earlystop_epoch')
 
 	### get statistics
 	def get_best_epoch(self):

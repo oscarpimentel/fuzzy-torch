@@ -192,7 +192,7 @@ class TemporalEncoder(nn.Module):
 		return encoding
 
 	def __len__(self):
-		return utils.count_parameters(self)
+		return utils.get_nof_parameters(self)
 
 ###################################################################################################################################################
 
@@ -290,7 +290,7 @@ class TimeFILM(nn.Module):
 		return x_mod
 
 	def __len__(self):
-		return utils.count_parameters(self)
+		return utils.get_nof_parameters(self)
 		
 	def extra_repr(self):
 		txt = strings.get_string_from_dict({

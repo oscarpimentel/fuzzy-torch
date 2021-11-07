@@ -177,7 +177,7 @@ class Linear(nn.Module):
 		return txt
 
 	def __len__(self):
-		return utils.count_parameters(self)
+		return utils.get_nof_parameters(self)
 
 	def __repr__(self):
 		txt = f'Linear({self.extra_repr()})'
@@ -246,7 +246,7 @@ class MLP(nn.Module):
 		return x
 
 	def __len__(self):
-		return utils.count_parameters(self)
+		return utils.get_nof_parameters(self)
 
 	def __repr__(self):
 		resume = ''

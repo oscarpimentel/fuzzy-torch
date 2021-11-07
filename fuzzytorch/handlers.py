@@ -16,7 +16,7 @@ import warnings
 from . import monitors as mon
 from . import exceptions as ex
 from .utils import get_model_name, TDictHolder, print_tdict
-from .models.utils import count_parameters
+from .models.utils import get_nof_parameters
 from.files import FTFile
 import cProfile
 from timeit import default_timer as timer
@@ -115,7 +115,7 @@ class ModelTrainHandler(object):
 	def __repr__(self):
 		txt = ''
 		txt += strings.get_bar(char=_Cfc.BOT_SQUARE_CHAR) + '\n'
-		txt += strings.color_str(f'model_name={self.model.get_name()}({count_parameters(self.model):,}[p])', 'blue')+'\n'
+		txt += strings.color_str(f'model_name={self.model.get_name()}({get_nof_parameters(self.model):,}[p])', 'blue')+'\n'
 		txt += strings.color_str(f'id={self.id}', 'blue')+'\n'
 		txt += strings.color_str(f'device={self.device} - device_name={self.device_name}', 'green')+'\n'
 		txt += f'save_rootdir={self.complete_save_roodir}' + '\n'
