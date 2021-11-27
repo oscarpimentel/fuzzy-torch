@@ -195,7 +195,6 @@ class SelfAttn(nn.Module):
 		return txt
 
 	def forward(self, x, onehot,
-		mul_attn_mask=None,
 		return_only_actual_scores=False,
 		**kwargs):
 		'''
@@ -327,7 +326,6 @@ class MLSelfAttn(nn.Module):
 		return txt
 
 	def forward(self, x, onehot,
-		mul_attn_mask=None,
 		return_only_actual_scores=False,
 		**kwargs):
 		'''
@@ -348,7 +346,6 @@ class MLSelfAttn(nn.Module):
 		
 		for k,self_attn in enumerate(self.self_attns):
 			x, scores = self_attn(x, onehot,
-				mul_attn_mask,
 				return_only_actual_scores,
 				**kwargs)
 		return x, scores
@@ -392,11 +389,9 @@ class TimeSelfAttn(SelfAttn):
 			)
 
 	def forward(self, x, onehot,
-		mul_attn_mask=None,
 		return_only_actual_scores=False,
 		**kwargs):
 		x, scores = super().forward(x, onehot,
-			mul_attn_mask,
 			return_only_actual_scores,
 			**kwargs)
 		return x, scores
@@ -515,7 +510,6 @@ class MLTimeSelfAttn(nn.Module):
 		return d
 
 	def forward(self, x, onehot, time,
-		mul_attn_mask=None,
 		return_only_actual_scores=False,
 		**kwargs):
 		'''
@@ -541,13 +535,11 @@ class MLTimeSelfAttn(nn.Module):
 			x, _ = self.rnn(x, onehot) 
 			for k,self_attn in enumerate(self.self_attns):
 				_, scores = self_attn(x, onehot,
-					mul_attn_mask,
 					return_only_actual_scores,
 					**kwargs)
 		else:
 			for k,self_attn in enumerate(self.self_attns):
 				x, scores = self_attn(x, onehot,
-					mul_attn_mask,
 					return_only_actual_scores,
 					**kwargs)
 		return x, scores

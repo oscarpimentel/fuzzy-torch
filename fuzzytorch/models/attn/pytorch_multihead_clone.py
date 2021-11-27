@@ -85,7 +85,6 @@ class MultiheadAttention(Module):
 		key_padding_mask=None,
 		need_weights=True,
 		attn_mask=None,
-		mul_attn_mask=None,
 		):
 
 		#print(self.uses_query_eye);print(self.q_proj_weight)
@@ -99,7 +98,6 @@ class MultiheadAttention(Module):
 				training=self.training,
 				key_padding_mask=key_padding_mask, need_weights=need_weights,
 				attn_mask=attn_mask,
-				mul_attn_mask=mul_attn_mask,
 				use_separate_proj_weight=True,
 				q_proj_weight=self.q_proj_weight,
 				k_proj_weight=self.k_proj_weight,
@@ -113,7 +111,6 @@ class MultiheadAttention(Module):
 				training=self.training,
 				key_padding_mask=key_padding_mask, need_weights=need_weights,
 				attn_mask=attn_mask,
-				mul_attn_mask=mul_attn_mask,
 				)
 
 
@@ -134,7 +131,6 @@ def multi_head_attention_forward(query,                           # type: Tensor
 								 key_padding_mask=None,           # type: Optional[Tensor]
 								 need_weights=True,               # type: bool
 								 attn_mask=None,                  # type: Optional[Tensor]
-								 mul_attn_mask=None,
 								 use_separate_proj_weight=False,  # type: bool
 								 q_proj_weight=None,              # type: Optional[Tensor]
 								 k_proj_weight=None,              # type: Optional[Tensor]
@@ -198,15 +194,12 @@ def multi_head_attention_forward(query,                           # type: Tensor
 	head_dim = embed_dim // num_heads
 	assert head_dim * num_heads == embed_dim, "embed_dim must be divisible by num_heads"
 	scaling = float(head_dim) ** -0.5 # SCALED DOT ATTN
-	#scaling = 1
 
 	if not use_separate_proj_weight:
 		if torch.equal(query, key) and torch.equal(key, value):
-			# self-attention
 			q, k, v = linear(query, in_proj_weight, in_proj_bias).chunk(3, dim=-1)
 
 		elif torch.equal(key, value):
-			# encoder-decoder attention
 			# This is inline in_proj function with in_proj_weight and in_proj_bias
 			_b = in_proj_bias
 			_start = 0
@@ -341,18 +334,6 @@ def multi_head_attention_forward(query,                           # type: Tensor
 
 	attn_output_weights = torch.bmm(q, k.transpose(1, 2))
 	assert list(attn_output_weights.size()) == [bsz * num_heads, tgt_len, src_len]
-
-	if mul_attn_mask is not None:
-		#print(attn_output_weights.shape)
-		#mul_attn_mask = mul_attn_mask.unsqueeze(0)
-		#print(attn_output_weights.shape, mul_attn_mask.shape)
-		attn_output_weights = attn_output_weights.view(bsz, num_heads, tgt_len, src_len)
-		#attn_output_weights = torch.clamp(attn_output_weights, 0, None) # all weights need to be positive positive
-		#attn_output_weights = torch.log(torch.exp(attn_output_weights)+1e-5) # all weights need to be positive positive
-		attn_output_weights = torch.sqrt(attn_output_weights**2+1e-5) # all weights need to be positive positive
-		#print(mul_attn_mask[0,0])
-		attn_output_weights = attn_output_weights*mul_attn_mask # not inplace
-		attn_output_weights = attn_output_weights.view(bsz * num_heads, tgt_len, src_len)
 
 	if attn_mask is not None:
 		attn_mask = attn_mask.unsqueeze(0)
