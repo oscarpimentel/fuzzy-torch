@@ -18,8 +18,8 @@ from .batch_norms import LayerNorm, MaskedBatchNorm1d
 from ..others import TimeFILM
 from .. import seq_utils as seq_utils
 import numpy as np
+import fuzzytorch.models.rnn.basics as ft_rnn # sanity_check
 
-DEFAULT_NON_LINEAR_ACTIVATION = _C.DEFAULT_NON_LINEAR_ACTIVATION
 MHSELFATTN_NORM_MODE = 'pre_norm' # none pre_norm post_norm
 MLP_NORM_MODE = 'none' # none pre_norm post_norm
 NUM_HEADS = 4
@@ -75,7 +75,6 @@ class SelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int,
 		max_curve_length=None,
 		num_heads=NUM_HEADS,
-		activation='linear',
 		in_dropout=0.0,
 		out_dropout=0.0,
 		attn_dropout=0.0,
@@ -99,7 +98,6 @@ class SelfAttn(nn.Module):
 		self.output_dims = output_dims
 		self.max_curve_length = max_curve_length
 		self.num_heads = num_heads
-		self.activation = activation
 		self.in_dropout = in_dropout
 		self.out_dropout = out_dropout
 		self.attn_dropout = attn_dropout
@@ -116,7 +114,6 @@ class SelfAttn(nn.Module):
 		self.head_dim = 0 if self.is_dummy() else self.input_dims//self.num_heads
 		self.in_dropout_f = nn.Dropout(self.in_dropout)
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
-		self.activation_f = non_linear.get_activation(self.activation)
 		self.bypass_mlp = self.mlp_k is None
 
 		### attn
@@ -176,7 +173,6 @@ class SelfAttn(nn.Module):
 			'max_curve_length':self.max_curve_length,
 			'num_heads':self.num_heads,
 			'head_dim':self.head_dim,
-			'activation':self.activation,
 			'in_dropout':self.in_dropout,
 			'out_dropout':self.out_dropout,
 			'attn_dropout':self.attn_dropout,
@@ -216,24 +212,23 @@ class SelfAttn(nn.Module):
 		### attn
 		if self.is_dummy():
 			n,h,t,qt = x.shape[0], 1, x.shape[1], x.shape[1]
-			scores = torch.zeros(size=(n,h,t,qt), device=x.device) # (n,h,t,qt)
+			x, scores = x, torch.zeros(size=(n,h,t,qt), device=x.device) # (n,h,t,qt)
+			scores = scores.detach()
 		else:
 			mhattn_kwargs = {
-				'key_padding_mask':~new_onehot, # attn ignore the True values
-				'attn_mask':self.src_mask,
+				'key_padding_mask':~new_onehot, # key_padding_mask ignore the True values
+				'attn_mask':self.src_mask, # attn_mask will add
 				}
-			x, scores = self.attn_res_block(x, f_returns_tuple=True, f_kwargs=mhattn_kwargs)
-
-		scores = scores.detach()
+			x, scores = self.attn_res_block(x, f_returns_tuple=True, f_kwargs=mhattn_kwargs) # (n,t,f)>(n,t,f)
+			scores = scores.detach()
 
 		### MLP
 		if self.bypass_mlp:
-			pass
+			x = x
 		else:
 			x = self.mlp_res_block(x)
 
-		### activation + dropout
-		# x = self.activation_f(x, dim=-1)
+		### dropout
 		x = self.out_dropout_f(x)
 		
 		### scores
@@ -256,8 +251,6 @@ class MLSelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list,
 		max_curve_length=None,
 		num_heads=NUM_HEADS,
-		activation=DEFAULT_NON_LINEAR_ACTIVATION,
-		last_activation='linear',
 		in_dropout=0.0,
 		dropout=0.0,
 		out_dropout=0.0,
@@ -277,33 +270,27 @@ class MLSelfAttn(nn.Module):
 		self.embd_dims_list = [self.input_dims]+embd_dims_list+[self.output_dims]
 		self.max_curve_length = max_curve_length
 		self.num_heads = num_heads
-		self.activation = activation
-		self.last_activation = last_activation
 		self.in_dropout = in_dropout
 		self.dropout = dropout
 		self.out_dropout = out_dropout
 		self.attn_dropout = attn_dropout
 		self.bias = bias
 
-		activations = [activation]*(len(self.embd_dims_list)-1) # create activations along
-		if not self.last_activation is None:
-			activations[-1] = self.last_activation
-
 		### MODULES
 		self.self_attns = nn.ModuleList()
-		for k in range(len(self.embd_dims_list)-1):
+		for k in range(0, len(self.embd_dims_list)-1):
 			input_dims_ = self.embd_dims_list[k]
 			output_dims_ = self.embd_dims_list[k+1]
-			attn_kwargs = {
-				'max_curve_length':self.max_curve_length,
-				'num_heads':self.num_heads,
-				'activation':activations[k],
-				'in_dropout':self.in_dropout if k==0 else self.dropout,
-				'out_dropout':self.out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
-				'attn_dropout':self.attn_dropout,
-				'bias':self.bias,
-			}
-			self_attn = SelfAttn(input_dims_, output_dims_, **attn_kwargs)
+			self_attn = SelfAttn(input_dims_, output_dims_,
+				max_curve_length=self.max_curve_length,
+				num_heads=self.num_heads,
+				in_dropout=self.in_dropout if k==0 else self.dropout,
+				out_dropout=self.out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
+				attn_dropout=self.attn_dropout,
+				bias=self.bias,
+				mlp_dropout=self.mlp_dropout,
+				residual_dropout=self.residual_dropout,
+				)
 			self.self_attns += [self_attn]
 
 		self.reset()
@@ -346,7 +333,7 @@ class MLSelfAttn(nn.Module):
 		
 		for k,self_attn in enumerate(self.self_attns):
 			x, scores = self_attn(x, onehot,
-				return_only_actual_scores,
+				return_only_actual_scores=return_only_actual_scores,
 				**kwargs)
 		return x, scores
 
@@ -362,49 +349,10 @@ class MLSelfAttn(nn.Module):
 
 ###################################################################################################################################################
 
-class TimeSelfAttn(SelfAttn):
-	def __init__(self, input_dims:int, output_dims:int,
-		max_curve_length=None,
-		num_heads=NUM_HEADS,
-		activation='linear',
-		in_dropout=0.0,
-		out_dropout=0.0,
-		attn_dropout=0.0,
-		mlp_dropout=0.0,
-		residual_dropout=0.0,
-		bias=True,
-		**kwargs):
-		super().__init__(
-			input_dims, output_dims,
-			max_curve_length,
-			num_heads,
-			activation,
-			in_dropout,
-			out_dropout,
-			attn_dropout,
-			mlp_dropout,
-			residual_dropout,
-			bias,
-			**kwargs
-			)
-
-	def forward(self, x, onehot,
-		return_only_actual_scores=False,
-		**kwargs):
-		x, scores = super().forward(x, onehot,
-			return_only_actual_scores,
-			**kwargs)
-		return x, scores
-
-###################################################################################################################################################
-import fuzzytorch.models.rnn.basics as ft_rnn # sanity_check
-
 class MLTimeSelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, te_features, max_te_period,
 		max_curve_length=None,
 		num_heads=NUM_HEADS,
-		activation=DEFAULT_NON_LINEAR_ACTIVATION,
-		last_activation='linear',
 		in_dropout=0.0,
 		dropout=0.0,
 		out_dropout=0.0,
@@ -414,7 +362,6 @@ class MLTimeSelfAttn(nn.Module):
 		bias=True,
 		kernel_size=1,
 		time_noise_window=0,
-		fourier_dims=None,
 		removes_time_offset=REMOVES_TIME_OFFSET,
 		hardcodes_rnn=False,
 		**kwargs):
@@ -435,8 +382,6 @@ class MLTimeSelfAttn(nn.Module):
 		self.max_te_period = max_te_period
 		self.max_curve_length = max_curve_length
 		self.num_heads = num_heads
-		self.activation = activation
-		self.last_activation = last_activation
 		self.in_dropout = in_dropout
 		self.dropout = dropout
 		self.out_dropout = out_dropout
@@ -446,38 +391,30 @@ class MLTimeSelfAttn(nn.Module):
 		self.bias = bias
 		self.kernel_size = kernel_size
 		self.time_noise_window = time_noise_window
-		self.fourier_dims = fourier_dims
 		self.removes_time_offset = removes_time_offset
 		self.hardcodes_rnn = hardcodes_rnn
-
-		activations = [activation]*(len(self.embd_dims_list)-1) # create activations along
-		if not self.last_activation is None:
-			activations[-1] = self.last_activation
 
 		### MODULES
 		self.te_film = TimeFILM(self.embd_dims_list[0], self.te_features, self.max_te_period,
 			kernel_size=self.kernel_size,
 			time_noise_window=self.time_noise_window,
-			fourier_dims=self.fourier_dims,
-			residual_dropout=self.residual_dropout,
 			removes_time_offset=self.removes_time_offset,
 			)
-		print('te_film:',self.te_film)
+		print('te_film:', self.te_film)
 
 		self.self_attns = nn.ModuleList()
 		for k in range(0, len(self.embd_dims_list)-1):
 			input_dims_ = self.embd_dims_list[k]
 			output_dims_ = self.embd_dims_list[k+1]
-			self_attn = TimeSelfAttn(input_dims_, output_dims_,
+			self_attn = SelfAttn(input_dims_, output_dims_,
 				max_curve_length=self.max_curve_length,
 				num_heads=self.num_heads,
-				activation=activations[k],
 				in_dropout=self.in_dropout if k==0 else self.dropout,
-				out_dropout=self.out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
+				out_dropout=self.out_dropout if k==len(self.embd_dims_list)-2 else .0,
 				attn_dropout=self.attn_dropout,
+				bias=self.bias,
 				mlp_dropout=self.mlp_dropout,
 				residual_dropout=self.residual_dropout,
-				bias=self.bias,
 				)
 			self.self_attns += [self_attn]
 
@@ -509,6 +446,16 @@ class MLTimeSelfAttn(nn.Module):
 			}
 		return d
 
+	# def sanity_check_rnn_forward(self, x, onehot, time,
+	# 	return_only_actual_scores=False,
+	# 	**kwargs):
+	# 	x, _ = self.rnn(x, onehot) 
+	# 	for k,self_attn in enumerate(self.self_attns):
+	# 		_, scores = self_attn(x, onehot,
+	# 			return_only_actual_scores=return_only_actual_scores,
+	# 			**kwargs)
+	# 	return x, scores
+
 	def forward(self, x, onehot, time,
 		return_only_actual_scores=False,
 		**kwargs):
@@ -532,14 +479,10 @@ class MLTimeSelfAttn(nn.Module):
 
 		x = self.te_film(x, time, onehot)
 		if self.hardcodes_rnn: # sanity_check
-			x, _ = self.rnn(x, onehot) 
-			for k,self_attn in enumerate(self.self_attns):
-				_, scores = self_attn(x, onehot,
-					return_only_actual_scores,
-					**kwargs)
+			assert 0
 		else:
 			for k,self_attn in enumerate(self.self_attns):
 				x, scores = self_attn(x, onehot,
-					return_only_actual_scores,
+					return_only_actual_scores=return_only_actual_scores,
 					**kwargs)
-		return x, scores
+			return x, scores

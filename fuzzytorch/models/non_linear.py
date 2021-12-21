@@ -7,8 +7,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-###################################################################################################################################################
-
 TORCH_ACT_DICT = {
 	'linear':'linear',
 	'conv':'Conv',
@@ -18,6 +16,8 @@ TORCH_ACT_DICT = {
 	'RelU':'Leaky Relu',
 	'selu':'SELU',
 }
+
+###################################################################################################################################################
 
 def f_linear(x, dim:int):
 	return x
@@ -47,10 +47,12 @@ def get_activation(activation:str):
 		return f_elu
 	if activation=='softmax':
 		return F.softmax
-	raise Exception(f'no valid activation={activation}')
+	raise Exception(f'activation={activation}')
 
 def get_xavier_gain(activation_name, param=None):
 	#assert activation in TORCH_ACT_DICT.keys()
 	#torch_activation = TORCH_ACT_DICT[activation]
-	gain = torch.nn.init.calculate_gain(activation_name, param=param)
+	gain = torch.nn.init.calculate_gain(activation_name,
+		param=param,
+		)
 	return gain

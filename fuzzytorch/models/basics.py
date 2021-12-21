@@ -14,19 +14,6 @@ NORM_MODE = 'pre_norm' # none pre_norm post_norm
 
 ###################################################################################################################################################
 
-class DummyModule(nn.Module):
-	def __init__(self, *args, **kwargs):
-		super().__init__()
-		pass
-
-	def reset(self):
-		pass
-
-	def reset_parameters(self):
-		pass
-
-###################################################################################################################################################
-
 class ResidualBlockHandler(nn.Module):
 	def __init__(self, f,
 		norm=None,
@@ -41,7 +28,7 @@ class ResidualBlockHandler(nn.Module):
 		assert norm_mode in ['none', 'pre_norm', 'post_norm']
 
 		self.f = f
-		self.norm = DummyModule() if norm is None else norm
+		self.norm = norm
 		self.norm_mode = norm_mode
 		self.activation = activation
 		self.residual_dropout = residual_dropout
@@ -139,7 +126,6 @@ class Linear(nn.Module):
 
 	def reset_parameters(self):
 		self.linear.reset_parameters()
-		# torch.nn.init.xavier_uniform_(self.linear.weight, gain=non_linear.get_xavier_gain(self.activation)) # ugly bug???
 		if not self.bias is None and not self.bias_value is None:
 			torch.nn.init.constant_(self.linear.bias, self.bias_value)
 
@@ -238,7 +224,7 @@ class MLP(nn.Module):
 
 	def forward(self, x):
 		'''
-		x: (b,...,f)
+		x: (n,...,f)
 		'''
 		assert self.input_dims==x.shape[-1]
 		for fc in self.fcs:

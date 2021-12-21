@@ -19,6 +19,19 @@ WS_PHASES_REQUIRES_GRAD = False
 
 ###################################################################################################################################################
 
+def _get_te(te_ws, te_phases, te_scales, time,
+	linear_term_k=0,
+	vectorized=True,
+	):
+	if vectorized:
+		return _vectorized_te(te_ws, te_phases, te_scales, time,
+			linear_term_k=linear_term_k,
+			)
+	else:
+		return _nonvectorized_te(te_ws, te_phases, te_scales, time,
+			linear_term_k=linear_term_k,
+			)
+
 def _vectorized_te(te_ws, te_phases, te_scales, time,
 	linear_term_k=0,
 	):
@@ -34,18 +47,16 @@ def _vectorized_te(te_ws, te_phases, te_scales, time,
 	_te_scales = te_scales[None,None,:] # (f) > (1,1,f)
 	_time = time[...,None] # (n,t) > (n,t,1)
 	if linear_term_k==0:
-		encoding = _te_scales*torch.sin(_te_ws*_time+_te_phases) # (n,t,f)
+		sin_arg = _te_ws*_time+_te_phases # (n,t,f)
+		encoding = _te_scales*torch.sin(sin_arg) # (n,t,f)
 	else:
-		assert 0
-		encoding1 = _te_ws[...,0][...,None]*_time+_te_phases[...,0][...,None] # (n,t,f)
-		encoding2 = torch.sin(_te_ws[...,1:]*_time+_te_phases[...,1:]) # (n,t,f)
-		#print(encoding1.shape, encoding2.shape)
-		encoding = torch.cat([encoding1, encoding2], axis=-1)
-	#print(encoding.shape)
-	#te_ws.dtype, te_phases.dtype, time.dtype)
+		assert 0, 'not implemented'
+		# encoding1 = _te_ws[...,0][...,None]*_time+_te_phases[...,0][...,None] # (n,t,f)
+		# encoding2 = torch.sin(_te_ws[...,1:]*_time+_te_phases[...,1:]) # (n,t,f)
+		# encoding = torch.cat([encoding1, encoding2], axis=-1)
 	return encoding
 
-def _te(te_ws, te_phases, te_scales, time,
+def _nonvectorized_te(te_ws, te_phases, te_scales, time,
 	linear_term_k=0,
 	):
 	'''
@@ -58,19 +69,17 @@ def _te(te_ws, te_phases, te_scales, time,
 	encoding = torch.zeros((n, t, len(te_phases)), device=time.device) # (n,t,f)
 	if linear_term_k==0:
 		for i in range(0, len(te_ws)):
-			w = te_ws[i]
-			phi = te_phases[i]
-			scale = te_scales[i]
-			encoding[...,i] = scale*torch.sin(w*time+phi)
+			sin_arg = te_ws[i]*time+te_phases[i]
+			encoding[...,i] = te_scales[i]*torch.sin(sin_arg)
 	else:
-		assert 0
+		assert 0, 'not implemented'
 	return encoding
 
 ###################################################################################################################################################
 
 class TemporalEncoder(nn.Module):
 	def __init__(self, te_features, max_te_period,
-		min_te_period=None, # 2 None
+		min_te_period=None,
 		time_noise_window=0, # regularization in time units
 		init_k_exp=.5,
 		ws_phases_requires_grad=WS_PHASES_REQUIRES_GRAD,
@@ -118,16 +127,17 @@ class TemporalEncoder(nn.Module):
 		return periods, phases
 
 	def w2period(self, w):
-		return 2*math.pi/w
+		return (2*math.pi)/w
 
 	def period2w(self, period):
-		return 2*math.pi/period
+		return (2*math.pi)/period
 
 	def extra_repr(self):
 		txt = strings.get_string_from_dict({
 			'te_features':self.te_features,
 			'min_te_period':self.min_te_period,
 			'max_te_period':self.max_te_period,
+			'te_ws':[f'{p:.3f}' for p in tensor_to_numpy(self.get_te_ws())],
 			'te_periods':[f'{p:.3f}' for p in tensor_to_numpy(self.get_te_periods())],
 			'te_phases':[f'{p:.3f}' for p in tensor_to_numpy(self.get_te_phases())],
 			'te_scales':[f'{p:.5f}' for p in tensor_to_numpy(self.get_te_scales())],
@@ -178,17 +188,14 @@ class TemporalEncoder(nn.Module):
 		assert len(time.shape)==2
 		time = time-time[:,0][...,None] if self.removes_time_offset else time # (n,t)
 		if self.training and self.time_noise_window>0:
-			#print(time, time.device)
 			uniform_noise = torch.rand(size=(1, time.shape[1]), device=time.device) # (1,t) # (0,1) noise
 			uniform_noise = self.time_noise_window*(uniform_noise-0.5) # k*(-0.5,0.5)
-			#print(uniform_noise)
-			time = time+uniform_noise # (n,t)+(1,t) > (n,t)
+			time = time+uniform_noise # (n,t)+(1,t)>(n,t)
 
 		te_ws = self.get_te_ws()
 		te_phases = self.get_te_phases()
 		te_scales = self.get_te_scales()
-		encoding = _vectorized_te(te_ws, te_phases, te_scales, time)
-		# print('periods', self.get_te_periods())
+		encoding = _get_te(te_ws, te_phases, te_scales, time)
 		return encoding
 
 	def __len__(self):
@@ -198,28 +205,21 @@ class TemporalEncoder(nn.Module):
 
 class TimeFILM(nn.Module):
 	def __init__(self, input_dims, te_features, max_te_period,
-		fourier_dims=1, # to delete
 		kernel_size=1,
 		time_noise_window=0, # regularization in time units
 		activation='relu',
-		residual_dropout=0,
 		uses_norm=False,
 		removes_time_offset=REMOVES_TIME_OFFSET,
 		**kwargs):
 		super().__init__()
 		### CHECKS
-		assert residual_dropout>=0 and residual_dropout<=1
-
 		self.input_dims = input_dims
 		self.te_features = te_features
 		self.max_te_period = max_te_period
-		self.fourier_dims = int(input_dims*fourier_dims)
-		self.fourier_dims = input_dims
 
 		self.kernel_size = kernel_size
 		self.time_noise_window = time_noise_window
 		self.activation = activation
-		self.residual_dropout = residual_dropout
 		self.uses_norm = uses_norm
 		self.removes_time_offset = removes_time_offset
 		self.reset()
@@ -227,27 +227,29 @@ class TimeFILM(nn.Module):
 	def reset(self):
 		self.dummy = self.te_features<=0
 		if not self.is_dummy():
-			linear_kwargs = {
-				'activation':'linear',
-				#'bias':self.bias,
-				}
 			assert self.input_dims>0
 			self.temporal_encoder = TemporalEncoder(self.te_features, self.max_te_period,
 				time_noise_window=self.time_noise_window,
 				removes_time_offset=self.removes_time_offset,
 				)
-			#self.te_mod_beta = TemporalEncoder(self.te_features, self.max_te_period)
 			print('temporal_encoder:',self.temporal_encoder)
-			self.gamma_beta_f = Linear(self.te_features, self.fourier_dims, split_out=2, bias=False, **linear_kwargs) # BIAS MUST BE FALSE
+			self.gamma_beta_f = Linear(self.te_features, self.input_dims,
+				split_out=2,
+				bias=False, # BIAS MUST BE FALSE
+				activation='linear',
+				)
 
 		self.cnn_pad = nn.ConstantPad1d([self.kernel_size-1, 0], 0)
-		self.cnn = nn.Conv1d(self.fourier_dims, self.input_dims, kernel_size=self.kernel_size, padding=0, bias=True)
+		self.cnn = nn.Conv1d(self.input_dims, self.input_dims,
+			kernel_size=self.kernel_size,
+			padding=0,
+			bias=True,
+			)
 
 		if self.uses_norm:
 			self.norm = torch.nn.LayerNorm([self.input_dims])
 
 		self.activation_f = non_linear.get_activation(self.activation)
-		self.residual_dropout_f = nn.Dropout(self.residual_dropout) # not used
 
 	def get_info(self):
 		if not self.is_dummy():
@@ -269,19 +271,18 @@ class TimeFILM(nn.Module):
 		else:
 			temporal_encoding = self.temporal_encoder(time) # (n,t,2M)
 			gamma, beta = self.gamma_beta_f(temporal_encoding) # (n,t,2M)>(n,t,2K)>[(n,t,K),(n,t,K)]
-			# x_mod = x*gamma+beta # element-wise modulation
 			x_mod = x*torch.tanh(gamma)+beta # element-wise modulation
 
 		if self.uses_norm:
 			x_mod = self.norm(x_mod)
 
-		x_mod = x_mod.permute(0,2,1)
-		x_mod = self.cnn(self.cnn_pad(x_mod))
-		x_mod = x_mod.permute(0,2,1)
+		x_mod = x_mod.permute(0,2,1) # (n,t,f)>(n,f,t)
+		x_mod = self.cnn(self.cnn_pad(x_mod)) # (n,f,t)
+		x_mod = x_mod.permute(0,2,1) # (n,f,t)>(n,t,fx)
 		return x_mod
 
 	def forward(self, x, time, onehot, **kwargs):
-		# x: (n,t,fx)
+		# x: (n,t,f)
 		# time: (n,t)
 		assert x.shape[-1]==self.input_dims
 
@@ -295,9 +296,7 @@ class TimeFILM(nn.Module):
 	def extra_repr(self):
 		txt = strings.get_string_from_dict({
 			'activation':self.activation,
-			'residual_dropout':self.residual_dropout,
 			'input_dims':self.input_dims,
-			'fourier_dims':self.fourier_dims,
 			'kernel_size':self.kernel_size,
 			}, ', ', '=')
 		return txt

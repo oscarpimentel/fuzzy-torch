@@ -33,14 +33,13 @@ class LSTM(nn.Module):
 		self.bidirectional = bidirectional
 
 		### MODULES
-		rnn_kwargs = {
-			'num_layers':1,
-			'bias':self.bias,
-			'batch_first':True,
-			'dropout':0.0,
-			'bidirectional':self.bidirectional
-		}
-		self.rnn = torch.nn.LSTM(self.input_dims, self.output_dims, **rnn_kwargs)
+		self.rnn = torch.nn.LSTM(self.input_dims, self.output_dims,
+			num_layers=1,
+			bias=self.bias,
+			batch_first=True,
+			dropout=0.0,
+			bidirectional=self.bidirectional
+			)
 		self.in_dropout_f = nn.Dropout(self.in_dropout)
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
 
@@ -104,14 +103,13 @@ class GRU(nn.Module):
 		self.bidirectional = bidirectional
 
 		### MODULES
-		rnn_kwargs = {
-			'num_layers':1,
-			'bias':self.bias,
-			'batch_first':True,
-			'dropout':0.0,
-			'bidirectional':self.bidirectional
-		}
-		self.rnn = torch.nn.GRU(self.input_dims, self.output_dims, **rnn_kwargs)
+		self.rnn = torch.nn.GRU(self.input_dims, self.output_dims,
+			num_layers=1,
+			bias=self.bias,
+			batch_first=True,
+			dropout=0.0,
+			bidirectional=self.bidirectional
+			)
 		self.in_dropout_f = nn.Dropout(self.in_dropout)
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
 
@@ -150,12 +148,6 @@ class GRU(nn.Module):
 		x_packed = nn.utils.rnn.PackedSequence(self.out_dropout_f(x_packed.data), x_packed.batch_sizes, x_packed.sorted_indices, x_packed.unsorted_indices)
 		return x_packed
 
-	# def forward(self, x,
-	# 	h0=None,
-	# 	**kwargs):
-	# 	x, hidden = self.rnn(x, h0)
-	# 	return x
-
 ###################################################################################################################################################
 
 class MLRNN(nn.Module):
@@ -188,17 +180,16 @@ class MLRNN(nn.Module):
 
 		### MODULES
 		self.rnns = nn.ModuleList()
-		for k in range(len(self.embd_dims_list)-1):
+		for k in range(0, len(self.embd_dims_list)-1):
 			input_dims_ = self.embd_dims_list[k]
 			output_dims_ = self.embd_dims_list[k+1]
-			rnn_kwargs = {
-				'max_curve_length':self.max_curve_length,
-				'in_dropout':self.in_dropout if k==0 else self.dropout,
-				'out_dropout':self.out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
-				'bias':self.bias,
-				'bidirectional':self.bidirectional,
-			}
-			rnn = self.rnn_class(input_dims_, output_dims_, **rnn_kwargs)
+			rnn = self.rnn_class(input_dims_, output_dims_,
+				max_curve_length=self.max_curve_length,
+				in_dropout=self.in_dropout if k==0 else self.dropout,
+				out_dropout=self.out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
+				bias=self.bias,
+				bidirectional=self.bidirectional,
+				)
 			self.rnns.append(rnn)
 
 		self.reset()
@@ -218,12 +209,12 @@ class MLRNN(nn.Module):
 		'''
 		Parameters
 		----------
-		x (b,t,f): input tensor.
-		onehot (b,t)
+		x (n,t,f): input tensor.
+		onehot (n,t)
 
 		Return
 		----------
-		x_out: (b,t,h): output tensor.
+		x_out: (n,t,f): output tensor.
 		'''
 		assert onehot.dtype==torch.bool
 		assert len(onehot.shape)==2
@@ -231,13 +222,15 @@ class MLRNN(nn.Module):
 		assert len(x.shape)==3
 
 		self.max_curve_length = x.shape[1]
-		extra_info = {}
-		lengths = torch.clamp(onehot.sum(dim=-1), 1, None) # forced to avoid errors of empty bands sequences
+		extra_info = {} # unused
+		new_onehot = onehot.clone()
+		new_onehot[:,0] = True # forced to avoid errors of empty bands sequences
+		lengths = new_onehot.sum(dim=-1)
 		cpu_lengths = lengths.detach().to('cpu') # lengths needs to be in cpu, is there a fix to this slow operation?
 		for k,rnn in enumerate(self.rnns):
 			x_packed = nn.utils.rnn.pack_padded_sequence(x, cpu_lengths, batch_first=True, enforce_sorted=False)
 			x_packed = rnn(x_packed, **kwargs)
-			x,_ = nn.utils.rnn.pad_packed_sequence(x_packed, batch_first=True, padding_value=0, total_length=self.max_curve_length) # argument is Sequence
+			x,_ = nn.utils.rnn.pad_packed_sequence(x_packed, batch_first=True, padding_value=0, total_length=self.max_curve_length) # argument is Sequence instance
 		return x, extra_info
 
 	def __len__(self):
@@ -264,12 +257,12 @@ class MLGRU(MLRNN):
 		self.class_name = 'GRU'
 		self.rnn_class = GRU
 		super().__init__(input_dims, output_dims, embd_dims_list,
-			max_curve_length,
-			in_dropout,
-			dropout,
-			out_dropout,
-			bias,
-			bidirectional,
+			max_curve_length=max_curve_length,
+			in_dropout=in_dropout,
+			dropout=dropout,
+			out_dropout=out_dropout,
+			bias=bias,
+			bidirectional=bidirectional,
 			)
 
 ###################################################################################################################################################
@@ -286,10 +279,10 @@ class MLLSTM(MLRNN):
 		self.class_name = 'LSTM'
 		self.rnn_class = LSTM
 		super().__init__(input_dims, output_dims, embd_dims_list,
-			max_curve_length,
-			in_dropout,
-			dropout,
-			out_dropout,
-			bias,
-			bidirectional,
+			max_curve_length=max_curve_length,
+			in_dropout=in_dropout,
+			dropout=dropout,
+			out_dropout=out_dropout,
+			bias=bias,
+			bidirectional=bidirectional,
 			)

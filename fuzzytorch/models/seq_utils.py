@@ -69,17 +69,16 @@ class LinearSEFT(nn.Module):
 
 	def forward(self, x, onehot,
 		**kwargs):
-		# x (b,t,f)
-		# onehot (b,t)
+		# x (n,t,f)
+		# onehot (n,t)
 		assert len(x.shape)==3
 		assert len(onehot.shape)==2
 
 		if self.is_dummy():
-			return seq_last_element(x, onehot) # (b,t,f) > (b,f)
-			# return seq_avg_pooling(x, onehot) # (b,t,f) > (b,f)
+			return seq_last_element(x, onehot) # (n,t,f) > (n,f)
 		else:
-			hx = seq_avg_pooling(torch.relu(self.h(x)), onehot) # (b,t,f) > (b,f)
-			gx = self.g(hx) # (b,f) > (b,f)
+			hx = seq_avg_pooling(torch.relu(self.h(x)), onehot) # (n,t,f) > (n,f)
+			gx = self.g(hx) # (n,f) > (n,f)
 			return gx
 
 ###################################################################################################################################################
@@ -89,14 +88,14 @@ def _check(x, onehot):
 	assert len(onehot.shape)==2
 	assert x.shape[:-1]==onehot.shape
 	assert len(x.shape)==3
-	b,t,f = x.size()
-	return b,t,f
+	n,t,f = x.size()
+	return n,t,f
 
 ###################################################################################################################################################
 
 def get_dummy_onehot(x):
-	b,t,f = x.size()
-	onehot = torch.ones((b,t), device=x.device, dtype=bool)
+	n,t,f = x.size()
+	onehot = torch.ones((n,t), device=x.device, dtype=bool)
 	return onehot
 
 def get_dummy_not_missing_mask(x):
@@ -111,7 +110,7 @@ def get_seq_onehot_mask(seqlengths, max_seqlength,
 	batch_size = len(seqlengths)
 	mask = torch.arange(max_seqlength, device=seqlengths.device if device is None else device).expand(batch_size, max_seqlength)
 	mask = (mask < seqlengths[...,None])
-	return mask.bool() # (b,t)
+	return mask.bool() # (n,t)
 
 ###################################################################################################################################################
 
@@ -119,8 +118,8 @@ def seq_clean(x, onehot,
 	padding_value=PADDING_VALUE,
 	):
 	'''
-	x (b,t,f)
-	onehot (b,t)
+	x (n,t,f)
+	onehot (n,t)
 	'''
 	b,t,f = _check(x, onehot)
 	x = x.masked_fill(~onehot[...,None], padding_value) # clean using onehot
@@ -132,9 +131,9 @@ def seq_fill_missing(raw_x, not_missing_mask, onehot,
 	nan_value=0,
 	):
 	'''
-	x (b,t,f)
-	not_missing_mask (b,t,f)
-	onehot (b,t)
+	x (n,t,f)
+	not_missing_mask (n,t,f)
+	onehot (n,t)
 	'''
 	x = raw_x.clone()
 	x[torch.isnan(x)] = nan_value
@@ -143,10 +142,10 @@ def seq_fill_missing(raw_x, not_missing_mask, onehot,
 	b,t,f = _check(not_missing_mask, onehot)
 
 	new_x = torch.zeros_like(x)
-	x_last = x[:,0,:] # (b,f)
+	x_last = x[:,0,:] # (n,f)
 	for i in range(0, t): # sadly...we need a for
 		#print('i',i)
-		miss = (1-not_missing_mask[:,i,:].int()) # (b,f)
+		miss = (1-not_missing_mask[:,i,:].int()) # (n,f)
 		x_actual = x[:,i,:]
 		_x = x_actual*(1-miss)+x_last*(miss)
 		new_x[:,i,:] = _x
@@ -155,28 +154,28 @@ def seq_fill_missing(raw_x, not_missing_mask, onehot,
 
 def seq_dtimes(times, not_missing_mask, onehot):
 	'''
-	times (b,t,f)
-	not_missing_mask (b,t,f)
-	onehot (b,t)
+	times (n,t,f)
+	not_missing_mask (n,t,f)
+	onehot (n,t)
 	'''
 	assert not_missing_mask.dtype==torch.bool
 	b,t,_ = _check(times[...,None], onehot)
 	b,t,f = _check(not_missing_mask, onehot)
 
-	ftimes = times[...,None].repeat(1,1,f) # (b,t) > (b,t,f)
-	cache_ftimes = seq_fill_missing(ftimes, not_missing_mask, onehot, nan_value=0) # (b,t,f)
+	ftimes = times[...,None].repeat(1,1,f) # (n,t) > (n,t,f)
+	cache_ftimes = seq_fill_missing(ftimes, not_missing_mask, onehot, nan_value=0) # (n,t,f)
 	#print(cache_ftimes.shape, cache_ftimes[0].permute(1,0))
-	new_cache_ftimes = torch.cat([cache_ftimes[:,0,:][:,None,:], cache_ftimes], dim=1) # (b,t,f) > (b,t+1,f)
+	new_cache_ftimes = torch.cat([cache_ftimes[:,0,:][:,None,:], cache_ftimes], dim=1) # (n,t,f) > (n,t+1,f)
 	#print(new_cache_ftimes.shape, new_cache_ftimes[0].permute(1,0))
-	dtimes = ftimes-new_cache_ftimes[:,:-1,:] # (b,t+1,f) > (b,t,f)
+	dtimes = ftimes-new_cache_ftimes[:,:-1,:] # (n,t+1,f) > (n,t,f)
 	return dtimes
 
 ###################################################################################################################################################
 
 def _seq_dtimes(times, onehot):
 	'''
-	times (b,t)
-	onehot (b,t)
+	times (n,t)
+	onehot (n,t)
 	'''
 	b,t,_ = _check(times[...,None], onehot)
 	new_times = torch.cat([times[:,0][...,None], times], dim=1)
@@ -187,47 +186,47 @@ def seq_avg_pooling(x, onehot,
 	empty_seq_value=EMPTY_SEQ_VALUE,
 	):
 	'''
-	x (b,t,f)
-	onehot (b,t)
+	x (n,t,f)
+	onehot (n,t)
 	'''
-	b,t,f = _check(x, onehot)
+	n,t,f = _check(x, onehot)
 	new_onehot = onehot.clone()
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
 	x = seq_clean(x, onehot, empty_seq_value) # important
 	x = seq_clean(x, new_onehot, 0) # important
-	x = x.sum(dim=1)/(new_onehot.sum(dim=1)[...,None]) # (b,t,f) > (b,f)
+	x = x.sum(dim=1)/(new_onehot.sum(dim=1)[...,None]) # (n,t,f) > (n,f)
 	return x
 
 def seq_sum_pooling(x, onehot,
 	empty_seq_value=EMPTY_SEQ_VALUE,
 	):
 	'''
-	x (b,t,f)
-	onehot (b,t)
+	x (n,t,f)
+	onehot (n,t)
 	'''
-	b,t,f = _check(x, onehot)
+	n,t,f = _check(x, onehot)
 	new_onehot = onehot.clone()
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
 	x = seq_clean(x, onehot, empty_seq_value) # important
 	x = seq_clean(x, new_onehot, 0) # important
-	x = x.sum(dim=1) # (b,t,f) > (b,f)
+	x = x.sum(dim=1) # (n,t,f) > (n,f)
 	return x
 
 def seq_last_element(x, onehot,
 	empty_seq_value=EMPTY_SEQ_VALUE,
 	):
 	'''
-	x (b,t,f)
-	onehot (b,t)
+	x (n,t,f)
+	onehot (n,t)
 	'''
-	b,t,f = _check(x, onehot)
+	n,t,f = _check(x, onehot)
 	new_onehot = onehot.clone()
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
 	x = seq_clean(x, onehot, empty_seq_value) # important
 	x = seq_clean(x, new_onehot, 0) # important
-	indexs = torch.sum(onehot[...,None], dim=1)-1 # (b,t,1) > (b,1) # -1 because index is always 1 unit less than length
+	indexs = torch.sum(onehot[...,None], dim=1)-1 # (n,t,1) > (n,1) # -1 because index is always 1 unit less than length
 	indexs = torch.clamp(indexs, 0, None) # forced -1 -> 0 to avoid errors of empty sequences!!
-	last_x = torch.gather(x, 1, indexs[:,:,None].expand(-1,-1,f)) # index (b,t,f) > (b,1,f)
+	last_x = torch.gather(x, 1, indexs[:,:,None].expand(-1,-1,f)) # index (n,t,f) > (n,1,f)
 	last_x = last_x[:,0,:]
 	return last_x
 
@@ -236,10 +235,10 @@ def seq_min_pooling(x, onehot,
 	inf=INF,
 	):
 	'''
-	x (b,t,f)
-	onehot (b,t)
+	x (n,t,f)
+	onehot (n,t)
 	'''
-	b,t,f = _check(x, onehot)
+	n,t,f = _check(x, onehot)
 	new_onehot = onehot.clone()
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
 	x = seq_clean(x, onehot, empty_seq_value) # important
@@ -253,10 +252,10 @@ def seq_max_pooling(x, onehot,
 	inf=INF,
 	):
 	'''
-	x (b,t,f)
-	onehot (b,t)
+	x (n,t,f)
+	onehot (n,t)
 	'''
-	b,t,f = _check(x, onehot)
+	n,t,f = _check(x, onehot)
 	new_onehot = onehot.clone()
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
 	x = seq_clean(x, onehot, empty_seq_value) # important
@@ -271,14 +270,14 @@ def seq_min_max_norm(x, onehot,
 	eps=EPS,
 	):
 	'''
-	x (b,t,f)
-	onehot (b,t)
+	x (n,t,f)
+	onehot (n,t)
 	'''
 	assert zero_diff_value>=0 and zero_diff_value<=1
-	b,t,f = _check(x, onehot)
+	n,t,f = _check(x, onehot)
 
-	_min = seq_min_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
-	_max = seq_max_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
+	_min = seq_min_pooling(x, onehot)[:,None,:] # (n,f) > (n,1,f)
+	_max = seq_max_pooling(x, onehot)[:,None,:] # (n,f) > (n,1,f)
 	diff = _max-_min
 	new_x = (x-_min)/(diff+eps)
 	#print('eee',zero_diff.shape)
@@ -298,13 +297,13 @@ def seq_avg_norm(x, onehot, # FIXME
 	eps=EPS,
 	):
 	'''
-	x (b,t,f)
-	onehot (b,t)
+	x (n,t,f)
+	onehot (n,t)
 	'''
-	b,t,f = _check(x, onehot)
+	n,t,f = _check(x, onehot)
 	assert torch.all(x>=0)
 
-	_avg = seq_avg_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
+	_avg = seq_avg_pooling(x, onehot)[:,None,:] # (n,f) > (n,1,f)
 	return x/(_avg+eps)
 
 def seq_sum_norm(x, onehot, # FIXME
@@ -313,13 +312,13 @@ def seq_sum_norm(x, onehot, # FIXME
 	eps=EPS,
 	):
 	'''
-	x (b,t,f)
-	onehot (b,t)
+	x (n,t,f)
+	onehot (n,t)
 	'''
-	b,t,f = _check(x, onehot)
+	n,t,f = _check(x, onehot)
 	assert torch.all(x>=0)
 
-	_sum = seq_sum_pooling(x, onehot)[:,None,:] # (b,f) > (b,1,f)
+	_sum = seq_sum_pooling(x, onehot)[:,None,:] # (n,f) > (n,1,f)
 	return x/(_sum+eps)
 
 ###################################################################################################################################################
@@ -346,8 +345,8 @@ def serial_to_parallel(x, onehot,
 	padding_value=PADDING_VALUE,
 	):
 	'''
-	x (b,t,f)
-	onehot (b,t)
+	x (n,t,f)
+	onehot (n,t)
 	'''
 	_check(x, onehot)
 
@@ -363,8 +362,8 @@ def parallel_to_serial(list_x, s_onehot,
 	padding_value=PADDING_VALUE,
 	):
 	'''
-	list_x list[(b,t,f)]
-	onehot (b,t,d)
+	list_x list[(n,t,f)]
+	onehot (n,t,d)
 	'''
 	assert isinstance(list_x, list)
 	assert len(list_x)>0
@@ -406,7 +405,7 @@ def parallel_to_serial(list_x, s_onehot,
 
 def get_random_onehot(x, modes):
 	'''
-	x (b,t,f)
+	x (n,t,f)
 	'''
 	assert len(x.shape)==3
 	assert modes>=2
