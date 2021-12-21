@@ -256,9 +256,9 @@ class MLSelfAttn(nn.Module):
 		dropout=0.0,
 		out_dropout=0.0,
 		attn_dropout=0.0,
+		bias=True,
 		mlp_dropout=0.0,
 		residual_dropout=0.0,
-		bias=True,
 		**kwargs):
 		super().__init__()
 
