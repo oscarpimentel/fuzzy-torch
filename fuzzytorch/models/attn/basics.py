@@ -150,6 +150,7 @@ class SelfAttn(nn.Module):
 				norm_mode=self.mlp_norm_mode,
 				residual_dropout=self.residual_dropout,
 				)
+			# print('mlp', self.mlp)
 
 	def is_dummy(self):
 		return self.dummy
