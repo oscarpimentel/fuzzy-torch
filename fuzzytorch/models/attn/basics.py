@@ -256,9 +256,10 @@ class MLSelfAttn(nn.Module):
 		dropout=0.0,
 		out_dropout=0.0,
 		attn_dropout=0.0,
-		bias=True,
 		mlp_dropout=0.0,
 		residual_dropout=0.0,
+		bias=True,
+		hardcodes_rnn=False,
 		**kwargs):
 		super().__init__()
 
@@ -279,9 +280,10 @@ class MLSelfAttn(nn.Module):
 		self.dropout = dropout
 		self.out_dropout = out_dropout
 		self.attn_dropout = attn_dropout
-		self.bias = bias
 		self.mlp_dropout = mlp_dropout
 		self.residual_dropout = residual_dropout
+		self.bias = bias
+		self.hardcodes_rnn = hardcodes_rnn
 
 		### MODULES
 		self.self_attns = nn.ModuleList()
@@ -319,7 +321,17 @@ class MLSelfAttn(nn.Module):
 		txt = f'MLSelfAttn(\n{resume})({len(self):,}[p])'
 		return txt
 
-	def forward(self, x, onehot,
+	def sanity_check_rnn_forward(self, x, onehot, time,
+		return_only_actual_scores=False,
+		**kwargs):
+		x, _ = self.rnn(x, onehot) 
+		for k,self_attn in enumerate(self.self_attns):
+			_, scores = self_attn(x, onehot,
+				return_only_actual_scores=return_only_actual_scores,
+				**kwargs)
+		return x, scores
+
+	def forward_old(self, x, onehot,
 		return_only_actual_scores=False,
 		**kwargs):
 		'''
@@ -344,6 +356,37 @@ class MLSelfAttn(nn.Module):
 				**kwargs)
 		return x, scores
 
+	def forward(self, x, onehot, time,
+		return_only_actual_scores=False,
+		**kwargs):
+		'''
+		Parameters
+		----------
+		x (n,t,in): input tensor.
+		onehot (n,t)
+		time (n,t)
+
+		Return
+		----------
+		x: (n,t,out): output tensor.
+		scores: (n,h,t,qt)
+		'''
+		assert onehot.dtype==torch.bool
+		assert len(onehot.shape)==2
+		assert x.shape[:-1]==onehot.shape
+		assert len(x.shape)==3
+		assert len(time.shape)==2
+
+		x = self.te_film(x, time, onehot)
+		if self.hardcodes_rnn: # sanity_check
+			assert 0
+		else:
+			for k,self_attn in enumerate(self.self_attns):
+				x, scores = self_attn(x, onehot,
+					return_only_actual_scores=return_only_actual_scores,
+					**kwargs)
+			return x, scores
+
 	def __len__(self):
 		return utils.get_nof_parameters(self)
 
@@ -364,13 +407,13 @@ class MLTimeSelfAttn(nn.Module):
 		dropout=0.0,
 		out_dropout=0.0,
 		attn_dropout=0.0,
-		bias=True,
 		mlp_dropout=0.0,
 		residual_dropout=0.0,
+		bias=True,
+		hardcodes_rnn=False,
 		kernel_size=1,
 		time_noise_window=0,
 		removes_time_offset=REMOVES_TIME_OFFSET,
-		hardcodes_rnn=False,
 		**kwargs):
 		super().__init__()
 
@@ -396,10 +439,10 @@ class MLTimeSelfAttn(nn.Module):
 		self.mlp_dropout = mlp_dropout
 		self.residual_dropout = residual_dropout
 		self.bias = bias
+		self.hardcodes_rnn = hardcodes_rnn
 		self.kernel_size = kernel_size
 		self.time_noise_window = time_noise_window
 		self.removes_time_offset = removes_time_offset
-		self.hardcodes_rnn = hardcodes_rnn
 
 		### MODULES
 		self.te_film = TimeFILM(self.embd_dims_list[0], self.te_features, self.max_te_period,
@@ -453,16 +496,6 @@ class MLTimeSelfAttn(nn.Module):
 			}
 		return d
 
-	# def sanity_check_rnn_forward(self, x, onehot, time,
-	# 	return_only_actual_scores=False,
-	# 	**kwargs):
-	# 	x, _ = self.rnn(x, onehot) 
-	# 	for k,self_attn in enumerate(self.self_attns):
-	# 		_, scores = self_attn(x, onehot,
-	# 			return_only_actual_scores=return_only_actual_scores,
-	# 			**kwargs)
-	# 	return x, scores
-
 	def forward(self, x, onehot, time,
 		return_only_actual_scores=False,
 		**kwargs):
@@ -485,11 +518,8 @@ class MLTimeSelfAttn(nn.Module):
 		assert len(time.shape)==2
 
 		x = self.te_film(x, time, onehot)
-		if self.hardcodes_rnn: # sanity_check
-			assert 0
-		else:
-			for k,self_attn in enumerate(self.self_attns):
-				x, scores = self_attn(x, onehot,
-					return_only_actual_scores=return_only_actual_scores,
-					**kwargs)
-			return x, scores
+		for k,self_attn in enumerate(self.self_attns):
+			x, scores = self_attn(x, onehot,
+				return_only_actual_scores=return_only_actual_scores,
+				**kwargs)
+		return x, scores
