@@ -256,6 +256,8 @@ class MLSelfAttn(nn.Module):
 		dropout=0.0,
 		out_dropout=0.0,
 		attn_dropout=0.0,
+		mlp_dropout=0.0,
+		residual_dropout=0.0,
 		bias=True,
 		**kwargs):
 		super().__init__()
@@ -265,6 +267,8 @@ class MLSelfAttn(nn.Module):
 		assert dropout>=0 and dropout<=1
 		assert out_dropout>=0 and out_dropout<=1
 		assert attn_dropout>=0 and attn_dropout<=1
+		assert mlp_dropout>=0 and mlp_dropout<=1
+		assert residual_dropout>=0 and residual_dropout<=1
 
 		self.input_dims = input_dims
 		self.output_dims = output_dims
@@ -276,6 +280,8 @@ class MLSelfAttn(nn.Module):
 		self.out_dropout = out_dropout
 		self.attn_dropout = attn_dropout
 		self.bias = bias
+		self.mlp_dropout = mlp_dropout
+		self.residual_dropout = residual_dropout
 
 		### MODULES
 		self.self_attns = nn.ModuleList()
@@ -358,9 +364,9 @@ class MLTimeSelfAttn(nn.Module):
 		dropout=0.0,
 		out_dropout=0.0,
 		attn_dropout=0.0,
+		bias=True,
 		mlp_dropout=0.0,
 		residual_dropout=0.0,
-		bias=True,
 		kernel_size=1,
 		time_noise_window=0,
 		removes_time_offset=REMOVES_TIME_OFFSET,
