@@ -288,19 +288,23 @@ class MLSelfAttn(nn.Module):
 		### MODULES
 		self.self_attns = nn.ModuleList()
 		for k in range(0, len(self.embd_dims_list)-1):
-			input_dims_ = self.embd_dims_list[k]
-			output_dims_ = self.embd_dims_list[k+1]
-			self_attn = SelfAttn(input_dims_, output_dims_,
+			_input_dims = self.embd_dims_list[k]
+			_output_dims = self.embd_dims_list[k+1]
+			self_attn = SelfAttn(_input_dims, _output_dims,
 				max_curve_length=self.max_curve_length,
 				num_heads=self.num_heads,
 				in_dropout=self.in_dropout if k==0 else self.dropout,
 				out_dropout=self.out_dropout if k==len(self.embd_dims_list)-2 else 0.0,
 				attn_dropout=self.attn_dropout,
-				bias=self.bias,
 				mlp_dropout=self.mlp_dropout,
 				residual_dropout=self.residual_dropout,
+				bias=self.bias,
 				)
 			self.self_attns += [self_attn]
+
+		if self.hardcodes_rnn: # sanity_check
+			self.rnn = ft_rnn.MLGRU(self.input_dims, self.output_dims, embd_dims_list)
+			print('RNN SANITY CHECK', self.rnn)
 
 		self.reset()
 
@@ -454,23 +458,20 @@ class MLTimeSelfAttn(nn.Module):
 
 		self.self_attns = nn.ModuleList()
 		for k in range(0, len(self.embd_dims_list)-1):
-			input_dims_ = self.embd_dims_list[k]
-			output_dims_ = self.embd_dims_list[k+1]
-			self_attn = SelfAttn(input_dims_, output_dims_,
+			_input_dims = self.embd_dims_list[k]
+			_output_dims = self.embd_dims_list[k+1]
+			self_attn = SelfAttn(_input_dims, _output_dims,
 				max_curve_length=self.max_curve_length,
 				num_heads=self.num_heads,
 				in_dropout=self.in_dropout if k==0 else self.dropout,
 				out_dropout=self.out_dropout if k==len(self.embd_dims_list)-2 else .0,
 				attn_dropout=self.attn_dropout,
-				bias=self.bias,
 				mlp_dropout=self.mlp_dropout,
 				residual_dropout=self.residual_dropout,
+				bias=self.bias,
 				)
 			self.self_attns += [self_attn]
 
-		if self.hardcodes_rnn: # sanity_check
-			self.rnn = ft_rnn.MLGRU(self.input_dims, self.output_dims, embd_dims_list)
-			print('RNN SANITY CHECK', self.rnn)
 		self.reset()
 
 	def reset(self):
