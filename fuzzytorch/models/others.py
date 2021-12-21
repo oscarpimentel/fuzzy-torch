@@ -232,7 +232,7 @@ class TimeFILM(nn.Module):
 				time_noise_window=self.time_noise_window,
 				removes_time_offset=self.removes_time_offset,
 				)
-			print('temporal_encoder:',self.temporal_encoder)
+			
 			self.gamma_beta_f = Linear(self.te_features, self.input_dims,
 				split_out=2,
 				bias=False, # BIAS MUST BE FALSE
@@ -295,6 +295,7 @@ class TimeFILM(nn.Module):
 		
 	def extra_repr(self):
 		txt = strings.get_string_from_dict({
+			'\ntemporal_encoder':f'{self.temporal_encoder}\n',
 			'activation':self.activation,
 			'input_dims':self.input_dims,
 			'kernel_size':self.kernel_size,

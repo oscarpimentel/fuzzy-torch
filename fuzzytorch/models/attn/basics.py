@@ -150,7 +150,6 @@ class SelfAttn(nn.Module):
 				norm_mode=self.mlp_norm_mode,
 				residual_dropout=self.residual_dropout,
 				)
-			# print('mlp', self.mlp)
 
 	def is_dummy(self):
 		return self.dummy
@@ -318,57 +317,35 @@ class MLSelfAttn(nn.Module):
 	def __len__(self):
 		return utils.get_nof_parameters(self)
 
-	def __repr__(self):
-		resume = ''
+	def extra_repr(self):
+		txt = ''
 		for k,self_attn in enumerate(self.self_attns):
-			resume += f'  ({k}) - {str(self_attn)}\n'
-		txt = f'MLSelfAttn(\n{resume})({len(self):,}[p])'
+			txt += f'  ({k}) - {str(self_attn)}\n'
 		return txt
 
-	def sanity_check_rnn_forward(self, x, onehot, time,
-		return_only_actual_scores=False,
-		**kwargs):
-		x, _ = self.rnn(x, onehot) 
-		for k,self_attn in enumerate(self.self_attns):
-			_, scores = self_attn(x, onehot,
-				return_only_actual_scores=return_only_actual_scores,
-				**kwargs)
-		return x, scores
+	def __repr__(self):
+		txt = f'MLSelfAttn({self.extra_repr()})'
+		txt += f'({len(self):,}[p])'
+		return txt
 
-	def forward_old(self, x, onehot,
-		return_only_actual_scores=False,
-		**kwargs):
-		'''
-		Parameters
-		----------
-		x (n,t,in): input tensor.
-		onehot (n,t)
+	# def sanity_check_rnn_forward(self, x, onehot,
+	# 	return_only_actual_scores=False,
+	# 	**kwargs):
+	# 	x, _ = self.rnn(x, onehot) 
+	# 	for k,self_attn in enumerate(self.self_attns):
+	# 		_, scores = self_attn(x, onehot,
+	# 			return_only_actual_scores=return_only_actual_scores,
+	# 			**kwargs)
+	# 	return x, scores
 
-		Return
-		----------
-		x: (n,t,out): output tensor.
-		layers_scores: (n,h,t,qt)
-		'''
-		assert onehot.dtype==torch.bool
-		assert len(onehot.shape)==2
-		assert x.shape[:-1]==onehot.shape
-		assert len(x.shape)==3
-		
-		for k,self_attn in enumerate(self.self_attns):
-			x, scores = self_attn(x, onehot,
-				return_only_actual_scores=return_only_actual_scores,
-				**kwargs)
-		return x, scores
-
-	def forward(self, x, onehot, time,
+	def forward(self, x, onehot,
 		return_only_actual_scores=False,
 		**kwargs):
 		'''
 		Parameters
 		----------
-		x (n,t,in): input tensor.
+		x (n,t,f): input tensor.
 		onehot (n,t)
-		time (n,t)
 
 		Return
 		----------
@@ -379,27 +356,15 @@ class MLSelfAttn(nn.Module):
 		assert len(onehot.shape)==2
 		assert x.shape[:-1]==onehot.shape
 		assert len(x.shape)==3
-		assert len(time.shape)==2
 
-		x = self.te_film(x, time, onehot)
 		if self.hardcodes_rnn: # sanity_check
-			assert 0
+			assert 0, 'not implemented'
 		else:
 			for k,self_attn in enumerate(self.self_attns):
 				x, scores = self_attn(x, onehot,
 					return_only_actual_scores=return_only_actual_scores,
 					**kwargs)
 			return x, scores
-
-	def __len__(self):
-		return utils.get_nof_parameters(self)
-
-	def __repr__(self):
-		resume = ''
-		for k,self_attn in enumerate(self.self_attns):
-			resume += f'  ({k}) - {str(self_attn)}\n'
-		txt = f'MLSelfAttn(\n{resume})({len(self):,}[p])'
-		return txt
 
 ###################################################################################################################################################
 
@@ -431,7 +396,7 @@ class MLTimeSelfAttn(nn.Module):
 
 		self.input_dims = input_dims
 		self.output_dims = output_dims
-		self.embd_dims_list = [self.input_dims]+embd_dims_list+[self.output_dims]
+		self.embd_dims_list = embd_dims_list
 		self.te_features = te_features
 		self.max_te_period = max_te_period
 		self.max_curve_length = max_curve_length
@@ -449,46 +414,48 @@ class MLTimeSelfAttn(nn.Module):
 		self.removes_time_offset = removes_time_offset
 
 		### MODULES
-		self.te_film = TimeFILM(self.embd_dims_list[0], self.te_features, self.max_te_period,
+		self.te_film = TimeFILM(self.input_dims, self.te_features, self.max_te_period,
 			kernel_size=self.kernel_size,
 			time_noise_window=self.time_noise_window,
 			removes_time_offset=self.removes_time_offset,
 			)
-		print('te_film:', self.te_film)
 
-		self.self_attns = nn.ModuleList()
-		for k in range(0, len(self.embd_dims_list)-1):
-			_input_dims = self.embd_dims_list[k]
-			_output_dims = self.embd_dims_list[k+1]
-			self_attn = SelfAttn(_input_dims, _output_dims,
-				max_curve_length=self.max_curve_length,
-				num_heads=self.num_heads,
-				in_dropout=self.in_dropout if k==0 else self.dropout,
-				out_dropout=self.out_dropout if k==len(self.embd_dims_list)-2 else .0,
-				attn_dropout=self.attn_dropout,
-				mlp_dropout=self.mlp_dropout,
-				residual_dropout=self.residual_dropout,
-				bias=self.bias,
-				)
-			self.self_attns += [self_attn]
+		self.ml_self_attn = MLSelfAttn(input_dims, output_dims, embd_dims_list,
+			max_curve_length=max_curve_length,
+			num_heads=num_heads,
+			in_dropout=in_dropout,
+			dropout=dropout,
+			out_dropout=out_dropout,
+			attn_dropout=attn_dropout,
+			mlp_dropout=mlp_dropout,
+			residual_dropout=residual_dropout,
+			bias=bias,
+			hardcodes_rnn=hardcodes_rnn,
+			**kwargs)
 
 		self.reset()
 
 	def reset(self):
-		for self_attn in self.self_attns:
-			self_attn.reset()
+		self.te_film.reset()
+		self.ml_self_attn.reset()
 
 	def get_embd_dims_list(self):
-		return self.embd_dims_list
+		return self.ml_self_attn.get_embd_dims_list()
 
 	def __len__(self):
 		return utils.get_nof_parameters(self)
 
+
+	def extra_repr(self):
+		txt = strings.get_string_from_dict({
+			'\nte_film':f'{self.te_film}\n',
+			'ml_self_attn':f'{self.ml_self_attn}\n',
+			}, ', ', '=')
+		return txt
+
 	def __repr__(self):
-		resume = ''
-		for k,self_attn in enumerate(self.self_attns):
-			resume += f' ({k}) - {str(self_attn)}\n'
-		txt = f'MLTimeSelfAttn(\n{resume})({len(self):,}[p])'
+		txt = f'MLTimeModSelfAttn({self.extra_repr()})'
+		txt += f'({len(self):,}[p])'
 		return txt
 
 	def get_info(self):
@@ -503,7 +470,7 @@ class MLTimeSelfAttn(nn.Module):
 		'''
 		Parameters
 		----------
-		x (n,t,in): input tensor.
+		x (n,t,f): input tensor.
 		onehot (n,t)
 		time (n,t)
 
@@ -519,8 +486,7 @@ class MLTimeSelfAttn(nn.Module):
 		assert len(time.shape)==2
 
 		x = self.te_film(x, time, onehot)
-		for k,self_attn in enumerate(self.self_attns):
-			x, scores = self_attn(x, onehot,
-				return_only_actual_scores=return_only_actual_scores,
-				**kwargs)
+		x, scores = self.ml_self_attn(x, onehot,
+			return_only_actual_scores=return_only_actual_scores,
+			**kwargs)
 		return x, scores
