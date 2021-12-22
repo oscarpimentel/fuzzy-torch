@@ -222,15 +222,6 @@ class MLP(nn.Module):
 	def get_output_dims(self):
 		return self.output_dims
 
-	def forward(self, x):
-		'''
-		x: (n,...,f)
-		'''
-		assert self.input_dims==x.shape[-1]
-		for fc in self.fcs:
-			x = fc(x)
-		return x
-
 	def __len__(self):
 		return utils.get_nof_parameters(self)
 
@@ -241,3 +232,20 @@ class MLP(nn.Module):
 
 		txt = f'MLP(\n{resume})({len(self):,}[p])'
 		return txt
+
+	def forward(self, x,
+		returns_pre_last=False,
+		):
+		'''
+		x: (n,...,f)
+		'''
+		assert self.input_dims==x.shape[-1]
+		for k,fc in enumerate(self.fcs):
+			x = fc(x)
+			if k==len(self.fcs)-2:
+				pre_last = x
+
+		if returns_pre_last:
+			return x, pre_last
+		else:
+			return x

@@ -361,7 +361,7 @@ class MLSelfAttn(nn.Module):
 			assert 0, 'not implemented'
 		else:
 			for k,self_attn in enumerate(self.self_attns):
-				x, scores = self_attn(x, onehot,
+				x, scores = self_attn(x, onehot, # (n,t,f)>(n,t,f)
 					return_only_actual_scores=return_only_actual_scores,
 					**kwargs)
 			return x, scores
@@ -485,8 +485,8 @@ class MLTimeSelfAttn(nn.Module):
 		assert len(x.shape)==3
 		assert len(time.shape)==2
 
-		x = self.te_film(x, time, onehot)
-		x, scores = self.ml_self_attn(x, onehot,
+		x = self.te_film(x, time, onehot) # (n,t,f)>(n,t,f)
+		x, scores = self.ml_self_attn(x, onehot, # (n,t,f)>(n,t,out)
 			return_only_actual_scores=return_only_actual_scores,
 			**kwargs)
 		return x, scores
