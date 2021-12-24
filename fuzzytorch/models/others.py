@@ -69,8 +69,8 @@ def _nonvectorized_te(te_ws, te_phases, te_scales, time,
 	encoding = torch.zeros((n, t, len(te_phases)), device=time.device) # (n,t,f)
 	if linear_term_k==0:
 		for i in range(0, len(te_ws)):
-			sin_arg = te_ws[i]*time+te_phases[i]
-			encoding[...,i] = te_scales[i]*torch.sin(sin_arg)
+			sin_arg = te_ws[i]*time+te_phases[i] # (n,t)
+			encoding[...,i] = te_scales[i]*torch.sin(sin_arg) # (n,t)
 	else:
 		assert 0, 'not implemented'
 	return encoding
@@ -94,7 +94,7 @@ class TemporalEncoder(nn.Module):
 		self.te_features = te_features
 		self.max_te_period = max_te_period
 		self.min_te_period = min_te_period
-		self.time_noise_window = eval(time_noise_window) if isinstance(time_noise_window, str) else time_noise_window
+		self.time_noise_window = eval(time_noise_window) if type(time_noise_window)==str else time_noise_window
 		self.init_k_exp = init_k_exp
 		self.ws_phases_requires_grad = ws_phases_requires_grad
 		self.removes_time_offset = removes_time_offset
@@ -114,7 +114,7 @@ class TemporalEncoder(nn.Module):
 
 	def generate_initial_tensors(self):
 		'''
-		# Tmax/1, Tmax/1, Tmax/2, TMax/2, , Tmax/3, TMax/3, ...
+		# Tmax/1, Tmax/1, Tmax/2, TMax/2, , Tmax/3, Tmax/3, ...
 		'''
 		if self.min_te_period is None:
 			n = self.get_output_dims()//2
@@ -148,8 +148,8 @@ class TemporalEncoder(nn.Module):
 		return txt
 
 	def get_info(self):
-		assert not self.training, 'you can not access this method in trining mode'
-		d = {
+		assert not self.training, 'you can not access this method in training mode'
+		return {
 			'te_features':self.te_features,
 			'initial_ws':self.initial_ws,
 			'initial_phases':self.initial_phases,
@@ -158,7 +158,6 @@ class TemporalEncoder(nn.Module):
 			'te_phases':tensor_to_numpy(self.get_te_phases()),
 			'te_scales':tensor_to_numpy(self.get_te_scales()),
 			}
-		return d
 
 	def __repr__(self):
 		txt = f'TemporalEncoder({self.extra_repr()})'
@@ -184,8 +183,11 @@ class TemporalEncoder(nn.Module):
 		return self.te_phases
 
 	def forward(self, time, **kwargs):
-		# time (n,t)
+		'''
+		time (n,t)
+		'''
 		assert len(time.shape)==2
+
 		time = time-time[:,0][...,None] if self.removes_time_offset else time # (n,t)
 		if self.training and self.time_noise_window>0:
 			uniform_noise = torch.rand(size=(1, time.shape[1]), device=time.device) # (1,t) # (0,1) noise
@@ -208,7 +210,6 @@ class TimeFILM(nn.Module):
 		kernel_size=1,
 		time_noise_window=0, # regularization in time units
 		activation='relu',
-		uses_norm=False,
 		removes_time_offset=REMOVES_TIME_OFFSET,
 		**kwargs):
 		super().__init__()
@@ -220,7 +221,6 @@ class TimeFILM(nn.Module):
 		self.kernel_size = kernel_size
 		self.time_noise_window = time_noise_window
 		self.activation = activation
-		self.uses_norm = uses_norm
 		self.removes_time_offset = removes_time_offset
 		self.reset()
 
@@ -235,7 +235,7 @@ class TimeFILM(nn.Module):
 			
 			self.gamma_beta_f = Linear(self.te_features, self.input_dims,
 				split_out=2,
-				bias=False, # BIAS MUST BE FALSE
+				bias=False, # BIAS MUST BE FALSE!!
 				activation='linear',
 				)
 
@@ -245,9 +245,6 @@ class TimeFILM(nn.Module):
 			padding=0,
 			bias=True,
 			)
-
-		if self.uses_norm:
-			self.norm = torch.nn.LayerNorm([self.input_dims])
 
 		self.activation_f = non_linear.get_activation(self.activation)
 
@@ -265,20 +262,13 @@ class TimeFILM(nn.Module):
 	def is_dummy(self):
 		return self.dummy
 
-	def f_mod(self, x, time, onehot):
+	def get_x_mod(self, x, time, onehot):
 		if self.is_dummy():
 			x_mod = x*1+0 # for ablation
 		else:
 			temporal_encoding = self.temporal_encoder(time) # (n,t,2M)
 			gamma, beta = self.gamma_beta_f(temporal_encoding) # (n,t,2M)>(n,t,2K)>[(n,t,K),(n,t,K)]
-			x_mod = x*torch.tanh(gamma)+beta # element-wise modulation
-
-		if self.uses_norm:
-			x_mod = self.norm(x_mod)
-
-		x_mod = x_mod.permute(0,2,1) # (n,t,f)>(n,f,t)
-		x_mod = self.cnn(self.cnn_pad(x_mod)) # (n,f,t)
-		x_mod = x_mod.permute(0,2,1) # (n,f,t)>(n,t,fx)
+			x_mod = torch.tanh(gamma)*x+beta # element-wise modulation
 		return x_mod
 
 	def forward(self, x, time, onehot, **kwargs):
@@ -286,9 +276,13 @@ class TimeFILM(nn.Module):
 		# time: (n,t)
 		assert x.shape[-1]==self.input_dims
 
-		x_mod = self.f_mod(x, time, onehot)
-		x_mod = self.activation_f(x_mod, dim=-1)
-		return x_mod
+		x = self.get_x_mod(x, time, onehot)
+		x = x.permute(0,2,1) # (n,t,f)>(n,f,t)
+		x = self.cnn(self.cnn_pad(x)) # (n,f,t)
+		x = x.permute(0,2,1) # (n,f,t)>(n,t,fx)
+
+		x = self.activation_f(x, dim=-1)
+		return x
 
 	def __len__(self):
 		return utils.get_nof_parameters(self)

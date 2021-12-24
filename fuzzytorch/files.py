@@ -8,7 +8,7 @@ from copy import copy, deepcopy
 
 ###################################################################################################################################################
 
-def override(func): return func # tricky
+def override(func): return func # trick
 class FTFile(PFile):
 	def __init__(self, filedir,
 		model=None,
@@ -16,9 +16,8 @@ class FTFile(PFile):
 		):
 		file = None
 		if not model is None:
-			state_dict = deepcopy(model.state_dict())
 			file = {
-				'state_dict':state_dict, # needs deepcopy, not just copy
+				'state_dict':deepcopy(model.state_dict()), # it needs to be deepcopy
 				'lmonitors':{lmonitor.name:lmonitor.get_save_dict() for lmonitor in lmonitors},
 				}
 		super().__init__(filedir,
@@ -35,8 +34,7 @@ class FTFile(PFile):
 		self.last_state = 'saved'
 		return
 
-	@override
-	def _load(self):
-		assert 0
-		file = torch.load(to_load_filedir)
-		return file
+	# @override
+	# def _load(self):
+	# 	file = torch.load(to_load_filedir)
+	# 	return file

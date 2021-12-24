@@ -8,6 +8,8 @@ import torch.nn.functional as F
 from .. import utils
 from fuzzytools import strings as strings
 
+BIDIRECTIONAL = False
+
 ###################################################################################################################################################
 
 class LSTM(nn.Module):
@@ -16,7 +18,7 @@ class LSTM(nn.Module):
 		in_dropout=0.,
 		out_dropout=0.,
 		bias=True,
-		bidirectional=False,
+		bidirectional=BIDIRECTIONAL,
 		**kwargs):
 		super().__init__()
 
@@ -86,7 +88,7 @@ class GRU(nn.Module):
 		in_dropout=0.0,
 		out_dropout=0.0,
 		bias=True,
-		bidirectional=False,
+		bidirectional=BIDIRECTIONAL,
 		**kwargs):
 		super().__init__()
 
@@ -157,7 +159,7 @@ class MLRNN(nn.Module):
 		dropout=0.0,
 		out_dropout=0.0,
 		bias=True,
-		bidirectional=False,
+		bidirectional=BIDIRECTIONAL,
 		**kwargs):
 		super().__init__()
 
@@ -252,7 +254,7 @@ class MLGRU(MLRNN):
 		dropout=0.0,
 		out_dropout=0.0,
 		bias=True,
-		bidirectional=False,
+		bidirectional=BIDIRECTIONAL,
 		**kwargs):
 		self.class_name = 'GRU'
 		self.rnn_class = GRU
@@ -274,7 +276,7 @@ class MLLSTM(MLRNN):
 		dropout=0.0,
 		out_dropout=0.0,
 		bias=True,
-		bidirectional=False,
+		bidirectional=BIDIRECTIONAL,
 		**kwargs):
 		self.class_name = 'LSTM'
 		self.rnn_class = LSTM

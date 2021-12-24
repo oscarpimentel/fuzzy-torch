@@ -50,13 +50,13 @@ class ResidualBlockHandler(nn.Module):
 		if hasattr(self.norm, 'reset_parameters'):
 			self.norm.reset_parameters()
 	
-	def norm_x(self, x,
+	def get_norm_x(self, x,
 		norm_args=[],
 		norm_kwargs={},
 		):
-		new_x = self.norm(x, *norm_args, **norm_kwargs)
-		assert new_x.shape==x.shape
-		return new_x
+		norm_x = self.norm(x, *norm_args, **norm_kwargs)
+		assert norm_x.shape==x.shape
+		return norm_x
 
 	def forward(self, x,
 		f_args=[],
@@ -69,19 +69,18 @@ class ResidualBlockHandler(nn.Module):
 		auxiliar class for residual connection
 		'''
 		if self.norm_mode=='pre_norm':
-			norm_x = self.norm_x(x, norm_args=norm_args, norm_kwargs=norm_kwargs)
-			fx_args = self.f(norm_x, *f_args, **f_kwargs)
+			fx_args = self.f(self.get_norm_x(x, norm_args=norm_args, norm_kwargs=norm_kwargs), *f_args, **f_kwargs)
 		else:
 			fx_args = self.f(x, *f_args, **f_kwargs)
 
 		fx = fx_args[0] if f_returns_tuple else fx_args
 		if self.ignore_f:
-			new_x = x
+			new_x = x+0
 		else:
 			new_x = x+self.residual_dropout_f(fx) # x=x+f(x)
 
 		if self.norm_mode=='post_norm':
-			new_x = self.norm_x(new_x, norm_args=norm_args, norm_kwargs=norm_kwargs)
+			new_x = self.get_norm_x(new_x, norm_args=norm_args, norm_kwargs=norm_kwargs)
 			
 		new_x = self.activation_f(new_x, dim=-1)
 		assert x.shape==new_x.shape
@@ -89,6 +88,7 @@ class ResidualBlockHandler(nn.Module):
 			return tuple([new_x])+fx_args[1:]
 		else:
 			return new_x
+
 
 ###################################################################################################################################################
 
@@ -131,23 +131,6 @@ class Linear(nn.Module):
 
 	def get_output_dims(self):
 		return self.output_dims
-		
-	def forward(self, x):
-		'''
-		x: (b,...,t)
-		'''
-		assert self.input_dims==x.shape[-1]
-
-		x = self.in_dropout_f(x)
-		x = self.linear(x)
-		x = self.activation_f(x, dim=-1)
-		x = self.out_dropout_f(x)
-
-		#### split if required
-		if self.split_out>1:
-			assert x.shape[-1]%self.split_out==0
-			return torch.chunk(x, self.split_out, dim=-1)
-		return x
 
 	def extra_repr(self):
 		txt = strings.get_string_from_dict({
@@ -169,6 +152,23 @@ class Linear(nn.Module):
 		txt = f'Linear({self.extra_repr()})'
 		txt += f'({len(self):,}[p])'
 		return txt
+
+	def forward(self, x):
+		'''
+		x: (b,...,t)
+		'''
+		assert self.input_dims==x.shape[-1]
+
+		x = self.in_dropout_f(x)
+		x = self.linear(x)
+		x = self.activation_f(x, dim=-1)
+		x = self.out_dropout_f(x)
+
+		#### split if required
+		if self.split_out>1:
+			assert x.shape[-1]%self.split_out==0
+			return torch.chunk(x, self.split_out, dim=-1)
+		return x
 
 class MLP(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list,

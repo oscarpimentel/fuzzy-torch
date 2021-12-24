@@ -114,17 +114,17 @@ class SelfAttn(nn.Module):
 		self.head_dim = 0 if self.is_dummy() else self.input_dims//self.num_heads
 		self.in_dropout_f = nn.Dropout(self.in_dropout)
 		self.out_dropout_f = nn.Dropout(self.out_dropout)
-		self.bypass_mlp = self.mlp_k is None
+		self.bypass_mlp = self.mlp_k is None or self.mlp_k==0
 
 		### attn
 		if not self.is_dummy():
 			mhattn = MultiheadAttention(self.input_dims, self.num_heads,
 				dropout=self.attn_dropout,
 				bias=self.bias,
-				add_bias_kv=False,
-				add_zero_attn=False,
 				kdim=None,
 				vdim=None,
+				add_bias_kv=False,
+				add_zero_attn=False,
 				)
 			self.self_mhattn = SelfAttnWrapper(mhattn)
 			self.attn_res_block = ResidualBlockHandler(self.self_mhattn,
@@ -182,6 +182,7 @@ class SelfAttn(nn.Module):
 			'mlp_k':self.mlp_k,
 			'mhselfattn_norm_mode':self.mhselfattn_norm_mode,
 			'mlp_norm_mode':self.mlp_norm_mode,
+			'mlp':self.mlp,
 			}, ', ', '=')
 		return txt
 
@@ -204,7 +205,7 @@ class SelfAttn(nn.Module):
 		x: (n,t,out): output tensor.
 		scores: (n,h,t,qt)
 		'''
-		self.register_src_mask(x.shape[1], x.device)
+		self.register_src_mask(x.shape[1], x.device) # create traingular mask
 		new_onehot = onehot.clone()
 		new_onehot[:,0] = True # forced to avoid errors of empty bands sequences
 		x = self.in_dropout_f(x)
@@ -222,7 +223,7 @@ class SelfAttn(nn.Module):
 			x, scores = self.attn_res_block(x, f_returns_tuple=True, f_kwargs=mhattn_kwargs) # (n,t,f)>(n,t,f)
 			scores = scores.detach()
 
-		### MLP
+		### mlp
 		if self.bypass_mlp:
 			x = x
 		else:
@@ -349,7 +350,7 @@ class MLSelfAttn(nn.Module):
 
 		Return
 		----------
-		x: (n,t,out): output tensor.
+		x: (n,t,f): output tensor.
 		scores: (n,h,t,qt)
 		'''
 		assert onehot.dtype==torch.bool
@@ -459,10 +460,9 @@ class MLTimeSelfAttn(nn.Module):
 		return txt
 
 	def get_info(self):
-		d = {
+		return {
 			'te_film':self.te_film.get_info(),
 			}
-		return d
 
 	def forward(self, x, onehot, time,
 		return_only_actual_scores=False,
@@ -476,7 +476,7 @@ class MLTimeSelfAttn(nn.Module):
 
 		Return
 		----------
-		x: (n,t,out): output tensor.
+		x: (n,t,f): output tensor.
 		scores: (n,h,t,qt)
 		'''
 		assert onehot.dtype==torch.bool
@@ -486,7 +486,7 @@ class MLTimeSelfAttn(nn.Module):
 		assert len(time.shape)==2
 
 		x = self.te_film(x, time, onehot) # (n,t,f)>(n,t,f)
-		x, scores = self.ml_self_attn(x, onehot, # (n,t,f)>(n,t,out)
+		x, scores = self.ml_self_attn(x, onehot, # (n,t,f)>(n,t,f)
 			return_only_actual_scores=return_only_actual_scores,
 			**kwargs)
 		return x, scores

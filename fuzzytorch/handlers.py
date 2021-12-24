@@ -137,6 +137,7 @@ class ModelTrainHandler(object):
 
 	def evaluate_in_set(self, set_name:str, set_loader, training_kwargs:dict,
 		):
+		# print(set_name)
 		self.model.eval() # model eval mode!
 		text = None
 		evaluated = False
@@ -157,22 +158,26 @@ class ModelTrainHandler(object):
 						#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
 						out_tdict = self.model(xxx(in_tdict, self.device), **training_kwargs)
 						#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
-						loss_v = lmonitor.loss(out_tdict, **training_kwargs) # (b)
+						loss_v = lmonitor.loss(out_tdict, **training_kwargs) # (n)
+						# print(loss_v.get_info())
 						set_losses += [loss_v]
 						for metric in lmonitor.metrics:
-							metric_v = metric(out_tdict, **training_kwargs) # (b)
+							metric_v = metric(out_tdict, **training_kwargs) # (n)
+							# print(ki, metric.name, metric_v.get_info())
 							set_metrics[metric.name] += [metric_v]
 
 					## SET LOSS TO HYSTORY
-					set_loss = sum(set_losses)
+					set_loss = sum(set_losses) # (n)+...+(n)>(n+...+n)
+					# print(set_loss.get_info())
 					lmonitor.add_loss_history_epoch(set_loss, lmonitor_cr.dt(), set_name)
 					text += f'[{lmonitor.name}] _loss={str(set_loss)}'
 
 					### save metrics to history & bar text
 					for metric in lmonitor.metrics:
-						set_metric = sum(set_metrics[metric.name])
+						set_metric = sum(set_metrics[metric.name]) # (n)+...+(n)>(n+...+n)
+						# print(metric.name, set_metric.get_info())
 						set_metrics[metric.name] = set_metric # replace
-						text += f' - {metric.name}={str(set_metric)}'
+						text += f'; {metric.name}={str(set_metric)}'
 
 					lmonitor.add_metric_history_epoch(set_metrics, lmonitor_cr.dt(), set_name)
 					text += f' {lmonitor_cr}'
@@ -200,7 +205,7 @@ class ModelTrainHandler(object):
 		load:bool=False,
 		k_every:int=1,
 		training_kwargs:dict={},
-		always_save=False,
+		always_save_best_model_in_disc=False,
 		delete_filedirs=True,
 		train_dataset_method_call=None,
 		**kwargs):
@@ -291,7 +296,7 @@ class ModelTrainHandler(object):
 					if evaluated:
 						self.training_save_model(epoch, 'val')
 						self.update_bar(training_bar, bar_text_dic)
-						if always_save:
+						if always_save_best_model_in_disc:
 							self.file.save()
 
 					#print('end of epoch')
@@ -369,12 +374,6 @@ class ModelTrainHandler(object):
 
 		loaded_dic = torch.load(to_load_filedir, map_location=self.device)
 		state_dict = loaded_dic['state_dict']
-
-		# fixme
-		keys = list(state_dict.keys())
-		for key in keys:
-			if key in ['autoencoder.encoder.ml_attn.g.self_attns.0.error_a', 'autoencoder.encoder.ml_attn.g.self_attns.0.error_b', 'autoencoder.encoder.ml_attn.r.self_attns.0.error_a', 'autoencoder.encoder.ml_attn.r.self_attns.0.error_b',]:
-				del state_dict[key]
 
 		self.model.load_state_dict(state_dict)
 		for lmonitor in self.lmonitors:
