@@ -129,7 +129,7 @@ class FTLoss():
 		**kwargs):
 		batch_weights = self._get_weights(tdict, **kwargs)
 		loss_dict = self.compute_loss(tdict, **kwargs)
-		if isinstance(loss_dict, dict):
+		if type(loss_dict)==dict:
 			assert '_loss' in loss_dict.keys()
 			_loss = loss_dict['_loss']
 			loss_obj = BatchLoss(_loss, batch_weights)
@@ -140,10 +140,10 @@ class FTLoss():
 				loss_obj.add_subloss(key, sub_loss)
 			return loss_obj
 
-		elif isinstance(loss_dict, torch.Tensor):
+		elif type(loss_dict)==torch.Tensor:
 			_loss = loss_dict # (n)
 			loss_obj = BatchLoss(_loss, batch_weights)
 			return loss_obj
 
 		else:
-			raise Exception(f'invalid type')
+			raise Exception(f'type={type(loss_dict)}')

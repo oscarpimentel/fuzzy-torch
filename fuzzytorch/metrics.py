@@ -58,6 +58,7 @@ class BatchMetric():
 
 	def get_info(self):
 		d = {
+			'_len':len(self),
 			'_metric':self.get_metric_item(),
 			}
 		return d
@@ -98,11 +99,11 @@ class LossWrapper(FTMetric):
 	def compute_metric(self, tdict,
 		**kwargs):
 		loss_dict = self.loss_obj.compute_loss(tdict, **kwargs) # (n)
-		if isinstance(loss_dict, dict):
+		if type(loss_dict)==dict:
 			_loss = loss_dict['_loss'] # (n)
 			return _loss
 
-		elif isinstance(loss_dict, torch.Tensor):
+		elif type(loss_dict)==torch.Tensor:
 			_loss = loss_dict # (n)
 			return _loss
 

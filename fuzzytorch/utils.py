@@ -46,6 +46,25 @@ def get_model_name(model_name_dict):
 
 ###################################################################################################################################################
 
+def minibatch_dict_collate(batch_dict_list):
+	'''
+	batch is first!
+	'''
+	dict_list = []
+	for minibatch_dict in batch_dict_list:
+		keys = list(minibatch_dict.keys())
+		batch_size = len(minibatch_dict[keys[0]])
+		for k in range(0, batch_size):
+			d = {}
+			for key in keys:
+				assert len(minibatch_dict[key])==batch_size
+				d[key] = minibatch_dict[key][k]
+			dict_list += [d]
+	new_d = torch.utils.data._utils.collate.default_collate(dict_list)
+	return new_d
+
+###################################################################################################################################################
+
 def get_tdict_repr(tdict):
 	if type(tdict)==dict:
 		return '{'+', '.join([f'{k}: {get_tdict_repr(tdict[k])}' for k in tdict.keys()])+'}'
@@ -58,51 +77,6 @@ def get_tdict_repr(tdict):
 
 def print_tdict(tdict):
 	print(get_tdict_repr(tdict))
-
-def create_d(links):
-	#print(links)
-	tree = {}
-	for path in links:                # for each path
-		node = tree                   # start from the very top
-		for level in path.split('/'): # split the path into a list
-			if level:                 # if a name is non-empty
-				node = node.setdefault(level, dict())
-									  # move to the deeper level
-									  # (or create it if unexistent)
-	return tree
-
-def nested_set(dic, keys, value):
-	for key in keys[:-1]:
-		dic = dic.setdefault(key, {})
-	dic[keys[-1]] = value
-
-def iter_paths(d):
-	def iter1(d, path):
-		paths = []
-		for k, v in d.items():
-			if type(v)==dict:
-				paths += iter1(v, path + [k])
-			paths.append((path + [k], v))
-		return paths
-	return iter1(d, [])
-
-def minibatch_dict_collate(batch_dict_list):
-	dict_list = []
-	for minibatch_dict_list in batch_dict_list:
-		dpaths = iter_paths(minibatch_dict_list)
-		batch_size = len(dpaths[0][1])
-		for i in range(batch_size):
-			d = create_d(['/'.join(dp) for dp,v in dpaths])
-			for dp,v in dpaths:
-				if type(v)==torch.Tensor:
-					#print(v_.shape)
-					nested_set(d, dp, v[i])
-			#print_tdict(d)
-			dict_list.append(d)
-
-	new_d = torch.utils.data._utils.collate.default_collate(dict_list)
-	#print_tdict(new_d)
-	return new_d
 
 def nested_tdict_to_device(tdict, device):
 	if type(tdict)==dict:
