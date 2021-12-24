@@ -21,25 +21,7 @@ from.files import FTFile
 import cProfile
 from timeit import default_timer as timer
 import torch.autograd.profiler as profiler
-
-def xxx(tdict, device,
-    chunk_dtype=torch.float32,
-    ):
-	# return TDictHolder(in_tdict).to(device)
-    chunk_d = {tdict[k].shape:{} for k in tdict.keys()}
-    for key in tdict.keys():
-        chunk_d[tdict[key].shape][key] = tdict[key]
-    d = {}
-    for shape in chunk_d.keys():
-        tensors = [chunk_d[shape][key] for key in chunk_d[shape].keys()]
-        # t = torch.cat(tensors, dim=0).to(device)
-        t = torch.zeros([len(tensors)]+list(shape), dtype=chunk_dtype)
-        for k in range(0, len(tensors)):
-            t[k] = tensors[k]
-        t = t.to(device)
-        for k,key in enumerate(chunk_d[shape].keys()):
-            d[key] = t[k].type(tdict[key].dtype)
-    return d
+from copy import copy, deepcopy
 
 ###################################################################################################################################################
 
@@ -156,7 +138,7 @@ class ModelTrainHandler(object):
 					set_metrics = {metric.name:[] for metric in lmonitor.metrics}
 					for ki,in_tdict in enumerate(set_loader): # batches loop
 						#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
-						out_tdict = self.model(xxx(in_tdict, self.device), **training_kwargs)
+						out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs)
 						#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
 						loss_v = lmonitor.loss(out_tdict, **training_kwargs) # (n)
 						# print(loss_v.get_info())
@@ -235,10 +217,8 @@ class ModelTrainHandler(object):
 			training_kwargs.update({'_epoch':epoch})
 			try:
 				if can_be_in_loop:
-					#with torch.autograd.detect_anomaly(): # really useful but slow af
-					#print('start')
+					#with torch.autograd.detect_anomaly(): # really useful but slow
 					self.model.train() # ensure train mode!
-					#print('start2')
 					if not train_dataset_method_call is None:
 						getattr(train_loader.dataset, train_dataset_method_call)()
 
@@ -254,9 +234,8 @@ class ModelTrainHandler(object):
 
 							lmonitor.optimizer.zero_grad(set_to_none=True) # False True
 
-							#print(f'  ({ki}) - {TDictHolder(in_tdict)}')
-							#print_tdict(in_tdict)
-							out_tdict = self.model(xxx(in_tdict, self.device), **training_kwargs) # Feed forward
+							# print(f'  ({ki}) - {TDictHolder(in_tdict)}')
+							out_tdict = self.model(TDictHolder(in_tdict).to(self.device), **training_kwargs) # Feed forward
 							#print(f'  ({ki}) - {TDictHolder(out_tdict)}')
 							batch_loss = lmonitor.loss(out_tdict, **training_kwargs)
 							batch_loss.backward() # gradient calculation

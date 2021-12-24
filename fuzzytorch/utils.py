@@ -44,25 +44,20 @@ def tensor_to_numpy(x):
 def get_model_name(model_name_dict):
 	return strings.get_string_from_dict(model_name_dict)
 
-def nested_tdict_to_device(d, device):
-	if isinstance(d, dict):
-		return {k:nested_tdict_to_device(d[k], device) for k in d.keys()}
-	elif isinstance(d, torch.Tensor):
-		return d if d.device==device else d.to(device)
-	else:
-		raise Exception(f'not supported {type(d)}')
+###################################################################################################################################################
 
-def print_tdict(d):
-	def get_tdict_repr(d):
-		if isinstance(d, dict):
-			return '{'+', '.join([f'{k}: {get_tdict_repr(d[k])}' for k in d.keys()])+'}'
-		elif isinstance(d, torch.Tensor):
-			x = d
-			shape_txt = '' if len(x.shape)==0 else ', '.join([str(i) for i in x.shape])
-			return f'({shape_txt})-{str(x.dtype)[6:]}-{x.device}'
-		else:
-			return ''
-	print(get_tdict_repr(d))
+def get_tdict_repr(tdict):
+	if type(tdict)==dict:
+		return '{'+', '.join([f'{k}: {get_tdict_repr(tdict[k])}' for k in tdict.keys()])+'}'
+	elif type(tdict)==torch.Tensor:
+		x = tdict
+		shape_txt = '' if len(x.shape)==0 else ', '.join([str(i) for i in x.shape])
+		return f'({shape_txt})-{str(x.dtype)[6:]}-{x.device}'
+	else:
+		return ''
+
+def print_tdict(tdict):
+	print(get_tdict_repr(tdict))
 
 def create_d(links):
 	#print(links)
@@ -77,15 +72,15 @@ def create_d(links):
 	return tree
 
 def nested_set(dic, keys, value):
-    for key in keys[:-1]:
-        dic = dic.setdefault(key, {})
-    dic[keys[-1]] = value
+	for key in keys[:-1]:
+		dic = dic.setdefault(key, {})
+	dic[keys[-1]] = value
 
 def iter_paths(d):
 	def iter1(d, path):
 		paths = []
 		for k, v in d.items():
-			if isinstance(v, dict):
+			if type(v)==dict:
 				paths += iter1(v, path + [k])
 			paths.append((path + [k], v))
 		return paths
@@ -99,7 +94,7 @@ def minibatch_dict_collate(batch_dict_list):
 		for i in range(batch_size):
 			d = create_d(['/'.join(dp) for dp,v in dpaths])
 			for dp,v in dpaths:
-				if isinstance(v, torch.Tensor):
+				if type(v)==torch.Tensor:
 					#print(v_.shape)
 					nested_set(d, dp, v[i])
 			#print_tdict(d)
@@ -109,27 +104,36 @@ def minibatch_dict_collate(batch_dict_list):
 	#print_tdict(new_d)
 	return new_d
 
+def nested_tdict_to_device(tdict, device):
+	if type(tdict)==dict:
+		return {k:nested_tdict_to_device(tdict[k], device) for k in tdict.keys()}
+	elif type(tdict)==torch.Tensor:
+		return tdict if tdict.device==device else tdict.to(device)
+	else:
+		raise Exception(f'type={type(tdict)}')
+
 ###################################################################################################################################################
 
 class TDictHolder():
-	def __init__(self, d):
-		assert isinstance(d, dict)
-		self.d = d
+	def __init__(self, tdict):
+		assert type(tdict)==dict
+		self.tdict = tdict
 
 	def to(self, device,
 		add_dummy_dim=False,
 		):
-		d = nested_tdict_to_device(self.d, device)
-		return torch.utils.data._utils.collate.default_collate([d]) if add_dummy_dim else d
+		out_tdict = nested_tdict_to_device(self.tdict, device)
+		out_tdict = torch.utils.data._utils.collate.default_collate([out_tdict]) if add_dummy_dim else out_tdict
+		return out_tdict
 
 	def __getitem__(self, key):
-		return self.d[key]
+		return self.tdict[key]
 
 	def __repr__(self):
-		return get_tdict_repr(self.d)
+		return get_tdict_repr(self.tdict)
 
 	def keys(self):
-		return self.d.keys()
+		return self.tdict.keys()
 
 	def get_tdict(self):
-		return self.d
+		return self.tdict
