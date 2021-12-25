@@ -78,14 +78,6 @@ def get_tdict_repr(tdict):
 def print_tdict(tdict):
 	print(get_tdict_repr(tdict))
 
-def nested_tdict_to_device(tdict, device):
-	if type(tdict)==dict:
-		return {k:nested_tdict_to_device(tdict[k], device) for k in tdict.keys()}
-	elif type(tdict)==torch.Tensor:
-		return tdict if tdict.device==device else tdict.to(device)
-	else:
-		raise Exception(f'type={type(tdict)}')
-
 ###################################################################################################################################################
 
 class TDictHolder():
@@ -96,7 +88,7 @@ class TDictHolder():
 	def to(self, device,
 		add_dummy_dim=False,
 		):
-		out_tdict = nested_tdict_to_device(self.tdict, device)
+		out_tdict = {key:self.tdict[key].to(device) for key in self.tdict.keys()}
 		out_tdict = torch.utils.data._utils.collate.default_collate([out_tdict]) if add_dummy_dim else out_tdict
 		return out_tdict
 
