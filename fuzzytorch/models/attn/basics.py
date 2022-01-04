@@ -14,17 +14,17 @@ from fuzzytools import strings as strings
 from fuzzytools import lists as lists
 from .pytorch_multihead_clone import MultiheadAttention
 # from torch.nn import MultiheadAttention
-from .batch_norms import LayerNorm, MaskedBatchNorm1d
 from ..others import TimeFILM
-from .. import seq_utils as seq_utils
+from .. import seq_utils
 import numpy as np
 import fuzzytorch.models.rnn.basics as ft_rnn # sanity_check
 
-MHSELFATTN_NORM_MODE = 'pre_norm' # none pre_norm post_norm
-MLP_NORM_MODE = 'none' # none pre_norm post_norm
+MHSELFATTN_NORM_MODE = 'pre_norm' # none pre_norm post_norm (optional)
+MLP_NORM_MODE = 'none' # none pre_norm post_norm (optional)
 NUM_HEADS = 4
 MLP_K = 1
 REMOVES_TIME_OFFSET = False
+USES_CLEAN_SEQ = True # (optional)
 
 ###################################################################################################################################################
 
@@ -84,6 +84,7 @@ class SelfAttn(nn.Module):
 		mlp_k=MLP_K,
 		mhselfattn_norm_mode=MHSELFATTN_NORM_MODE,
 		mlp_norm_mode=MLP_NORM_MODE,
+		uses_clean_seq=USES_CLEAN_SEQ,
 		**kwargs):
 		super().__init__()
 		### CHECKS
@@ -107,6 +108,7 @@ class SelfAttn(nn.Module):
 		self.mlp_k = mlp_k
 		self.mhselfattn_norm_mode = mhselfattn_norm_mode
 		self.mlp_norm_mode = mlp_norm_mode
+		self.uses_clean_seq = uses_clean_seq
 		self.reset()
 
 	def reset(self):
@@ -182,6 +184,7 @@ class SelfAttn(nn.Module):
 			'mlp_k':self.mlp_k,
 			'mhselfattn_norm_mode':self.mhselfattn_norm_mode,
 			'mlp_norm_mode':self.mlp_norm_mode,
+			'uses_clean_seq':self.uses_clean_seq,
 			'mlp':self.mlp,
 			}, ', ', '=')
 		return txt
@@ -208,7 +211,7 @@ class SelfAttn(nn.Module):
 		self.register_src_mask(x.shape[1], x.device) # create traingular mask
 		new_onehot = onehot.clone()
 		new_onehot[:,0] = True # forced to avoid errors of empty bands sequences
-		x = self.in_dropout_f(x)
+		x = self.in_dropout_f(x) # (n,t,f)>(n,t,f)
 
 		### attn
 		if self.is_dummy():
@@ -221,22 +224,25 @@ class SelfAttn(nn.Module):
 				'attn_mask':self.src_mask, # attn_mask will add
 				}
 			x, scores = self.attn_res_block(x, f_returns_tuple=True, f_kwargs=mhattn_kwargs) # (n,t,f)>(n,t,f)
-			scores = scores.detach()
+			scores = scores.detach() # (n,h,t,qt) should sum 1 in dim qt
+			# print(new_onehot[0,:])
+			# for k in range(0, new_onehot.shape[-1]):
+			# 	print(scores[0,0,k,:])
 
 		### mlp
 		if self.bypass_mlp:
 			x = x
 		else:
-			x = self.mlp_res_block(x)
+			x = self.mlp_res_block(x) # (n,t,f)>(n,t,f)
 
 		### dropout
-		x = self.out_dropout_f(x)
+		x = self.out_dropout_f(x) # (n,t,f)>(n,t,f)
 		
 		### scores
 		if return_only_actual_scores:
 			scores_size = scores.size()
 			if len(scores_size)==4: # from clone version
-				n,h,t,qt = scores_size
+				n,h,t,qt = scores_size # (n,h,t,qt)
 				scores = scores.permute(0,2,1,3) # (n,h,t,qt)>(n,t,h,qt)
 				scores = scores.reshape(n,t,h*qt) # (n,t,h,qt)>(n,t,h*qt)
 				scores = seq_utils.seq_last_element(scores, onehot) # last element (n,t,h*qt)>(n,h*qt)
@@ -244,6 +250,7 @@ class SelfAttn(nn.Module):
 			else: # from source version
 				pass # for now...
 
+		x = seq_utils.seq_clean(x, onehot) if self.uses_clean_seq else x # (n,t,f)>(n,t,f)
 		return x, scores
 
 ###################################################################################################################################################
@@ -259,6 +266,10 @@ class MLSelfAttn(nn.Module):
 		mlp_dropout=0.0,
 		residual_dropout=0.0,
 		bias=True,
+		mlp_k=MLP_K,
+		mhselfattn_norm_mode=MHSELFATTN_NORM_MODE,
+		mlp_norm_mode=MLP_NORM_MODE,
+		uses_clean_seq=USES_CLEAN_SEQ,
 		hardcodes_rnn=False,
 		**kwargs):
 		super().__init__()
@@ -283,6 +294,10 @@ class MLSelfAttn(nn.Module):
 		self.mlp_dropout = mlp_dropout
 		self.residual_dropout = residual_dropout
 		self.bias = bias
+		self.mlp_k = mlp_k
+		self.mhselfattn_norm_mode = mhselfattn_norm_mode
+		self.mlp_norm_mode = mlp_norm_mode
+		self.uses_clean_seq = uses_clean_seq
 		self.hardcodes_rnn = hardcodes_rnn
 
 		### MODULES
@@ -299,6 +314,10 @@ class MLSelfAttn(nn.Module):
 				mlp_dropout=self.mlp_dropout,
 				residual_dropout=self.residual_dropout,
 				bias=self.bias,
+				mlp_k=self.mlp_k,
+				mhselfattn_norm_mode=self.mhselfattn_norm_mode,
+				mlp_norm_mode=self.mlp_norm_mode,
+				uses_clean_seq=self.uses_clean_seq,
 				)
 			self.self_attns += [self_attn]
 
@@ -371,6 +390,9 @@ class MLSelfAttn(nn.Module):
 
 class MLTimeSelfAttn(nn.Module):
 	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, te_features, max_te_period,
+		kernel_size=1,
+		time_noise_window=0,
+		removes_time_offset=REMOVES_TIME_OFFSET,
 		max_curve_length=None,
 		num_heads=NUM_HEADS,
 		in_dropout=0.0,
@@ -380,10 +402,11 @@ class MLTimeSelfAttn(nn.Module):
 		mlp_dropout=0.0,
 		residual_dropout=0.0,
 		bias=True,
+		mlp_k=MLP_K,
+		mhselfattn_norm_mode=MHSELFATTN_NORM_MODE,
+		mlp_norm_mode=MLP_NORM_MODE,
+		uses_clean_seq=USES_CLEAN_SEQ,
 		hardcodes_rnn=False,
-		kernel_size=1,
-		time_noise_window=0,
-		removes_time_offset=REMOVES_TIME_OFFSET,
 		**kwargs):
 		super().__init__()
 
@@ -400,6 +423,9 @@ class MLTimeSelfAttn(nn.Module):
 		self.embd_dims_list = embd_dims_list
 		self.te_features = te_features
 		self.max_te_period = max_te_period
+		self.kernel_size = kernel_size
+		self.time_noise_window = time_noise_window
+		self.removes_time_offset = removes_time_offset
 		self.max_curve_length = max_curve_length
 		self.num_heads = num_heads
 		self.in_dropout = in_dropout
@@ -409,10 +435,11 @@ class MLTimeSelfAttn(nn.Module):
 		self.mlp_dropout = mlp_dropout
 		self.residual_dropout = residual_dropout
 		self.bias = bias
+		self.mlp_k = mlp_k
+		self.mhselfattn_norm_mode = mhselfattn_norm_mode
+		self.mlp_norm_mode = mlp_norm_mode
+		self.uses_clean_seq = uses_clean_seq
 		self.hardcodes_rnn = hardcodes_rnn
-		self.kernel_size = kernel_size
-		self.time_noise_window = time_noise_window
-		self.removes_time_offset = removes_time_offset
 
 		### MODULES
 		self.te_film = TimeFILM(self.input_dims, self.te_features, self.max_te_period,
@@ -422,16 +449,20 @@ class MLTimeSelfAttn(nn.Module):
 			)
 
 		self.ml_self_attn = MLSelfAttn(input_dims, output_dims, embd_dims_list,
-			max_curve_length=max_curve_length,
-			num_heads=num_heads,
-			in_dropout=in_dropout,
-			dropout=dropout,
-			out_dropout=out_dropout,
-			attn_dropout=attn_dropout,
-			mlp_dropout=mlp_dropout,
-			residual_dropout=residual_dropout,
-			bias=bias,
-			hardcodes_rnn=hardcodes_rnn,
+			max_curve_length=self.max_curve_length,
+			num_heads=self.num_heads,
+			in_dropout=self.in_dropout,
+			dropout=self.dropout,
+			out_dropout=self.out_dropout,
+			attn_dropout=self.attn_dropout,
+			mlp_dropout=self.mlp_dropout,
+			residual_dropout=self.residual_dropout,
+			bias=self.bias,
+			mlp_k=self.mlp_k,
+			mhselfattn_norm_mode=self.mhselfattn_norm_mode,
+			mlp_norm_mode=self.mlp_norm_mode,
+			uses_clean_seq=self.uses_clean_seq,
+			hardcodes_rnn=self.hardcodes_rnn,
 			**kwargs)
 
 		self.reset()

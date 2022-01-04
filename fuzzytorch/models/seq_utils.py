@@ -243,7 +243,6 @@ def seq_min_pooling(x, onehot,
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
 	x = seq_clean(x, onehot, empty_seq_value) # important
 	x = x.masked_fill(~new_onehot[...,None], inf) # inf imputation using onehot
-
 	x,_ = torch.min(x, dim=1)
 	return x
 
@@ -260,7 +259,6 @@ def seq_max_pooling(x, onehot,
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
 	x = seq_clean(x, onehot, empty_seq_value) # important
 	x = x.masked_fill(~new_onehot[...,None], -inf) # inf imputation using onehot
-
 	x,_ = torch.max(x, dim=1)
 	return x
 
@@ -280,13 +278,11 @@ def seq_min_max_norm(x, onehot,
 	_max = seq_max_pooling(x, onehot)[:,None,:] # (n,f) > (n,1,f)
 	diff = _max-_min
 	new_x = (x-_min)/(diff+eps)
-	#print('eee',zero_diff.shape)
-	#print('to',onehot[...,None].shape)
 	zero_diff = (diff==0).repeat((1,t,1))
 	new_x = new_x.masked_fill(zero_diff, zero_diff_value) # inf imputation  using onehot
 	new_onehot = onehot.clone()
 	new_onehot[:,0] = True # forced true to avoid errors of empty sequences!!
-	new_x = new_x.masked_fill(~new_onehot[...,None], padding_value) # inf imputation  using onehot
+	new_x = new_x.masked_fill(~new_onehot[...,None], padding_value) # inf imputation using onehot
 	return new_x
 
 ###################################################################################################################################################

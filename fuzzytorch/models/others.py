@@ -12,10 +12,12 @@ from . import utils as utils
 import fuzzytools.strings as strings
 import numpy as np
 import math
-from .attn.batch_norms import LayerNorm, MaskedBatchNorm1d
+from . import seq_utils
 
 REMOVES_TIME_OFFSET = False
 WS_PHASES_REQUIRES_GRAD = False
+USES_CLEAN_SEQ = True # (optional)
+RELU_NEGATIVE_SLOPE = 0 # 0 1e-3
 
 ###################################################################################################################################################
 
@@ -209,8 +211,9 @@ class TimeFILM(nn.Module):
 	def __init__(self, input_dims, te_features, max_te_period,
 		kernel_size=1,
 		time_noise_window=0, # regularization in time units
-		activation='relu',
 		removes_time_offset=REMOVES_TIME_OFFSET,
+		uses_clean_seq=USES_CLEAN_SEQ,
+		relu_negative_slope=RELU_NEGATIVE_SLOPE,
 		**kwargs):
 		super().__init__()
 		### CHECKS
@@ -220,13 +223,16 @@ class TimeFILM(nn.Module):
 
 		self.kernel_size = kernel_size
 		self.time_noise_window = time_noise_window
-		self.activation = activation
 		self.removes_time_offset = removes_time_offset
+		self.uses_clean_seq = uses_clean_seq
+		self.relu_negative_slope = relu_negative_slope
 		self.reset()
 
 	def reset(self):
 		self.dummy = self.te_features<=0
-		if not self.is_dummy():
+		if self.is_dummy():
+			self.temporal_encoder = None
+		else:
 			assert self.input_dims>0
 			self.temporal_encoder = TemporalEncoder(self.te_features, self.max_te_period,
 				time_noise_window=self.time_noise_window,
@@ -246,7 +252,7 @@ class TimeFILM(nn.Module):
 			bias=True,
 			)
 
-		self.activation_f = non_linear.get_activation(self.activation)
+		self.activation_f = torch.nn.ReLU() if self.relu_negative_slope<=0 else torch.nn.LeakyReLU(negative_slope=self.relu_negative_slope)
 
 	def get_info(self):
 		if not self.is_dummy():
@@ -267,7 +273,7 @@ class TimeFILM(nn.Module):
 			x_mod = x*1+0 # for ablation
 		else:
 			temporal_encoding = self.temporal_encoder(time) # (n,t,2M)
-			gamma, beta = self.gamma_beta_f(temporal_encoding) # (n,t,2M)>(n,t,2K)>[(n,t,K),(n,t,K)]
+			gamma, beta = self.gamma_beta_f(temporal_encoding) # (n,t,2M)>(n,t,2K)>(n,t,K),(n,t,K)
 			x_mod = torch.tanh(gamma)*x+beta # element-wise modulation
 		return x_mod
 
@@ -279,9 +285,15 @@ class TimeFILM(nn.Module):
 		x = self.get_x_mod(x, time, onehot)
 		x = x.permute(0,2,1) # (n,t,f)>(n,f,t)
 		x = self.cnn(self.cnn_pad(x)) # (n,f,t)
-		x = x.permute(0,2,1) # (n,f,t)>(n,t,fx)
+		x = x.permute(0,2,1) # (n,f,t)>(n,t,f)
 
-		x = self.activation_f(x, dim=-1)
+		x = self.activation_f(x) # (n,t,f)>(n,t,f)
+		x = seq_utils.seq_clean(x, onehot) if self.uses_clean_seq else x # (n,t,f)>(n,t,f)
+		# if self.training:
+		# 	print('x1',x[0,0,:10])
+		# 	print('x2',x[0,-1,:10])
+		# 	x.register_hook(lambda grad: print('grad1', grad[0,0,:10]))
+		# 	x.register_hook(lambda grad: print('grad2', grad[0,-1,:10]))
 		return x
 
 	def __len__(self):
@@ -290,9 +302,10 @@ class TimeFILM(nn.Module):
 	def extra_repr(self):
 		txt = strings.get_string_from_dict({
 			'\ntemporal_encoder':f'{self.temporal_encoder}\n',
-			'activation':self.activation,
-			'input_dims':self.input_dims,
 			'kernel_size':self.kernel_size,
+			'input_dims':self.input_dims,
+			'uses_clean_seq':self.uses_clean_seq,
+			'relu_negative_slope':self.relu_negative_slope,
 			}, ', ', '=')
 		return txt
 
