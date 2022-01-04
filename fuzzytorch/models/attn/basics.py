@@ -245,12 +245,12 @@ class SelfAttn(nn.Module):
 				n,h,t,qt = scores_size # (n,h,t,qt)
 				scores = scores.permute(0,2,1,3) # (n,h,t,qt)>(n,t,h,qt)
 				scores = scores.reshape(n,t,h*qt) # (n,t,h,qt)>(n,t,h*qt)
-				scores = seq_utils.seq_last_element(scores, onehot) # last element (n,t,h*qt)>(n,h*qt)
+				scores = seq_utils.seq_last_element(scores, new_onehot) # last element (n,t,h*qt)>(n,h*qt)
 				scores = scores.reshape(n,h,qt) # (n,h,qt) should sum 1 in dim qt
 			else: # from source version
 				pass # for now...
 
-		x = seq_utils.seq_clean(x, onehot) if self.uses_clean_seq else x # (n,t,f)>(n,t,f)
+		x = seq_utils.seq_clean(x, new_onehot) if self.uses_clean_seq else x # (n,t,f)>(n,t,f)
 		return x, scores
 
 ###################################################################################################################################################

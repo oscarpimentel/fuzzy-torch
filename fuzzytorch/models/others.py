@@ -268,7 +268,7 @@ class TimeFILM(nn.Module):
 	def is_dummy(self):
 		return self.dummy
 
-	def get_x_mod(self, x, time, onehot):
+	def get_x_mod(self, x, time):
 		if self.is_dummy():
 			x_mod = x*1+0 # for ablation
 		else:
@@ -277,18 +277,20 @@ class TimeFILM(nn.Module):
 			x_mod = torch.tanh(gamma)*x+beta # element-wise modulation
 		return x_mod
 
-	def forward(self, x, time, onehot, **kwargs):
+	def forward(self, x, time, **kwargs):
 		# x: (n,t,f)
 		# time: (n,t)
 		assert x.shape[-1]==self.input_dims
-
-		x = self.get_x_mod(x, time, onehot)
+		new_onehot = onehot.clone()
+		new_onehot[:,0] = True # forced to avoid errors of empty bands sequences
+		
+		x = self.get_x_mod(x, time)
 		x = x.permute(0,2,1) # (n,t,f)>(n,f,t)
 		x = self.cnn(self.cnn_pad(x)) # (n,f,t)
 		x = x.permute(0,2,1) # (n,f,t)>(n,t,f)
 
 		x = self.activation_f(x) # (n,t,f)>(n,t,f)
-		x = seq_utils.seq_clean(x, onehot) if self.uses_clean_seq else x # (n,t,f)>(n,t,f)
+		x = seq_utils.seq_clean(x, new_onehot) if self.uses_clean_seq else x # (n,t,f)>(n,t,f)
 		# if self.training:
 		# 	print('x1',x[0,0,:10])
 		# 	print('x2',x[0,-1,:10])
