@@ -24,7 +24,7 @@ MLP_NORM_MODE = 'none' # none pre_norm post_norm (optional)
 NUM_HEADS = 4
 MLP_K = 1
 REMOVES_TIME_OFFSET = False
-USES_CLEAN_SEQ = True # (optional)
+PADDING_VALUE = None # None 0 (optional)
 
 ###################################################################################################################################################
 
@@ -84,7 +84,7 @@ class SelfAttn(nn.Module):
 		mlp_k=MLP_K,
 		mhselfattn_norm_mode=MHSELFATTN_NORM_MODE,
 		mlp_norm_mode=MLP_NORM_MODE,
-		uses_clean_seq=USES_CLEAN_SEQ,
+		padding_value=PADDING_VALUE,
 		**kwargs):
 		super().__init__()
 		### CHECKS
@@ -108,7 +108,7 @@ class SelfAttn(nn.Module):
 		self.mlp_k = mlp_k
 		self.mhselfattn_norm_mode = mhselfattn_norm_mode
 		self.mlp_norm_mode = mlp_norm_mode
-		self.uses_clean_seq = uses_clean_seq
+		self.padding_value = padding_value
 		self.reset()
 
 	def reset(self):
@@ -184,7 +184,7 @@ class SelfAttn(nn.Module):
 			'mlp_k':self.mlp_k,
 			'mhselfattn_norm_mode':self.mhselfattn_norm_mode,
 			'mlp_norm_mode':self.mlp_norm_mode,
-			'uses_clean_seq':self.uses_clean_seq,
+			'padding_value':self.padding_value,
 			'mlp':self.mlp,
 			}, ', ', '=')
 		return txt
@@ -209,7 +209,7 @@ class SelfAttn(nn.Module):
 		scores: (n,h,t,qt)
 		'''
 		self.register_src_mask(x.shape[1], x.device) # create traingular mask
-		new_onehot = onehot.clone()
+		new_onehot = utils.get_onehot_clone(onehot)
 		new_onehot[:,0] = True # forced to avoid errors of empty bands sequences
 		x = self.in_dropout_f(x) # (n,t,f)>(n,t,f)
 
@@ -250,7 +250,7 @@ class SelfAttn(nn.Module):
 			else: # from source version
 				pass # for now...
 
-		x = seq_utils.seq_clean(x, new_onehot) if self.uses_clean_seq else x # (n,t,f)>(n,t,f)
+		x = seq_utils.seq_clean(x, new_onehot, padding_value=self.padding_value) # (n,t,f)>(n,t,f)
 		return x, scores
 
 ###################################################################################################################################################
@@ -269,7 +269,7 @@ class MLSelfAttn(nn.Module):
 		mlp_k=MLP_K,
 		mhselfattn_norm_mode=MHSELFATTN_NORM_MODE,
 		mlp_norm_mode=MLP_NORM_MODE,
-		uses_clean_seq=USES_CLEAN_SEQ,
+		padding_value=PADDING_VALUE,
 		hardcodes_rnn=False,
 		**kwargs):
 		super().__init__()
@@ -297,7 +297,7 @@ class MLSelfAttn(nn.Module):
 		self.mlp_k = mlp_k
 		self.mhselfattn_norm_mode = mhselfattn_norm_mode
 		self.mlp_norm_mode = mlp_norm_mode
-		self.uses_clean_seq = uses_clean_seq
+		self.padding_value = padding_value
 		self.hardcodes_rnn = hardcodes_rnn
 
 		### MODULES
@@ -317,7 +317,7 @@ class MLSelfAttn(nn.Module):
 				mlp_k=self.mlp_k,
 				mhselfattn_norm_mode=self.mhselfattn_norm_mode,
 				mlp_norm_mode=self.mlp_norm_mode,
-				uses_clean_seq=self.uses_clean_seq,
+				padding_value=self.padding_value,
 				)
 			self.self_attns += [self_attn]
 
@@ -370,7 +370,7 @@ class MLSelfAttn(nn.Module):
 		Return
 		----------
 		x: (n,t,f): output tensor.
-		scores: (n,h,t,qt)
+		scores: (n,l,h,t,qt) or (n,l,h,qt)
 		'''
 		assert onehot.dtype==torch.bool
 		assert len(onehot.shape)==2
@@ -380,10 +380,13 @@ class MLSelfAttn(nn.Module):
 		if self.hardcodes_rnn: # sanity_check
 			assert 0, 'not implemented'
 		else:
+			scores = []
 			for k,self_attn in enumerate(self.self_attns):
-				x, scores = self_attn(x, onehot, # (n,t,f)>(n,t,f)
+				x, _scores = self_attn(x, onehot, # (n,t,f)>(n,t,f)
 					return_only_actual_scores=return_only_actual_scores,
 					**kwargs)
+				scores += [_scores[:,None,...]]
+			scores = torch.cat(scores, dim=1)
 			return x, scores
 
 ###################################################################################################################################################
@@ -405,7 +408,7 @@ class MLTimeSelfAttn(nn.Module):
 		mlp_k=MLP_K,
 		mhselfattn_norm_mode=MHSELFATTN_NORM_MODE,
 		mlp_norm_mode=MLP_NORM_MODE,
-		uses_clean_seq=USES_CLEAN_SEQ,
+		padding_value=PADDING_VALUE,
 		hardcodes_rnn=False,
 		**kwargs):
 		super().__init__()
@@ -438,7 +441,7 @@ class MLTimeSelfAttn(nn.Module):
 		self.mlp_k = mlp_k
 		self.mhselfattn_norm_mode = mhselfattn_norm_mode
 		self.mlp_norm_mode = mlp_norm_mode
-		self.uses_clean_seq = uses_clean_seq
+		self.padding_value = padding_value
 		self.hardcodes_rnn = hardcodes_rnn
 
 		### MODULES
@@ -461,7 +464,7 @@ class MLTimeSelfAttn(nn.Module):
 			mlp_k=self.mlp_k,
 			mhselfattn_norm_mode=self.mhselfattn_norm_mode,
 			mlp_norm_mode=self.mlp_norm_mode,
-			uses_clean_seq=self.uses_clean_seq,
+			padding_value=self.padding_value,
 			hardcodes_rnn=self.hardcodes_rnn,
 			**kwargs)
 
@@ -508,7 +511,7 @@ class MLTimeSelfAttn(nn.Module):
 		Return
 		----------
 		x: (n,t,f): output tensor.
-		scores: (n,h,t,qt)
+		scores: (n,l,h,t,qt) or (n,l,h,qt)
 		'''
 		assert onehot.dtype==torch.bool
 		assert len(onehot.shape)==2

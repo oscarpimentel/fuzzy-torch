@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from ..utils import tensor_to_numpy
 from .basics import Linear, MLP, ResidualBlockHandler
 from . import non_linear
-from . import utils as utils
+from . import utils
 import fuzzytools.strings as strings
 import numpy as np
 import math
@@ -16,8 +16,8 @@ from . import seq_utils
 
 REMOVES_TIME_OFFSET = False
 WS_PHASES_REQUIRES_GRAD = False
-USES_CLEAN_SEQ = True # (optional)
 RELU_NEGATIVE_SLOPE = 0 # 0 1e-3
+PADDING_VALUE = None # None 0 (optional)
 
 ###################################################################################################################################################
 
@@ -86,6 +86,7 @@ class TemporalEncoder(nn.Module):
 		init_k_exp=.5,
 		ws_phases_requires_grad=WS_PHASES_REQUIRES_GRAD,
 		removes_time_offset=REMOVES_TIME_OFFSET,
+		padding_value=PADDING_VALUE,
 		**kwargs):
 		super().__init__()
 		### CHECKS
@@ -100,6 +101,7 @@ class TemporalEncoder(nn.Module):
 		self.init_k_exp = init_k_exp
 		self.ws_phases_requires_grad = ws_phases_requires_grad
 		self.removes_time_offset = removes_time_offset
+		self.padding_value = padding_value
 		self.reset()
 
 	def reset(self):
@@ -146,6 +148,7 @@ class TemporalEncoder(nn.Module):
 			'time_noise_window':self.time_noise_window,
 			'init_k_exp':self.init_k_exp,
 			'removes_time_offset':self.removes_time_offset,
+			'padding_value':self.padding_value,
 			}, ', ', '=')
 		return txt
 
@@ -184,13 +187,15 @@ class TemporalEncoder(nn.Module):
 	def get_te_phases(self):
 		return self.te_phases
 
-	def forward(self, time, **kwargs):
+	def forward(self, time, onehot, **kwargs):
 		'''
-		time (n,t)
+		time: (n,t)
+		onehot: (n,t)
 		'''
 		assert len(time.shape)==2
 
 		time = time-time[:,0][...,None] if self.removes_time_offset else time # (n,t)
+
 		if self.training and self.time_noise_window>0:
 			uniform_noise = torch.rand(size=(1, time.shape[1]), device=time.device) # (1,t) # (0,1) noise
 			uniform_noise = self.time_noise_window*(uniform_noise-0.5) # k*(-0.5,0.5)
@@ -200,6 +205,12 @@ class TemporalEncoder(nn.Module):
 		te_phases = self.get_te_phases()
 		te_scales = self.get_te_scales()
 		encoding = _get_te(te_ws, te_phases, te_scales, time)
+
+		if not self.padding_value is None:
+			new_onehot = utils.get_onehot_clone(onehot) # (n,t)
+			new_onehot[:,0] = True # forced to avoid errors of empty bands sequences
+			encoding = seq_utils.seq_clean(encoding, new_onehot, padding_value=self.padding_value) # (n,t,f)>(n,t,f)
+
 		return encoding
 
 	def __len__(self):
@@ -212,8 +223,9 @@ class TimeFILM(nn.Module):
 		kernel_size=1,
 		time_noise_window=0, # regularization in time units
 		removes_time_offset=REMOVES_TIME_OFFSET,
-		uses_clean_seq=USES_CLEAN_SEQ,
 		relu_negative_slope=RELU_NEGATIVE_SLOPE,
+		padding_value=PADDING_VALUE,
+		uses_tanh=True,
 		**kwargs):
 		super().__init__()
 		### CHECKS
@@ -224,8 +236,9 @@ class TimeFILM(nn.Module):
 		self.kernel_size = kernel_size
 		self.time_noise_window = time_noise_window
 		self.removes_time_offset = removes_time_offset
-		self.uses_clean_seq = uses_clean_seq
 		self.relu_negative_slope = relu_negative_slope
+		self.padding_value = padding_value
+		self.uses_tanh = uses_tanh
 		self.reset()
 
 	def reset(self):
@@ -237,6 +250,7 @@ class TimeFILM(nn.Module):
 			self.temporal_encoder = TemporalEncoder(self.te_features, self.max_te_period,
 				time_noise_window=self.time_noise_window,
 				removes_time_offset=self.removes_time_offset,
+				padding_value=self.padding_value,
 				)
 			
 			self.gamma_beta_f = Linear(self.te_features, self.input_dims,
@@ -268,29 +282,38 @@ class TimeFILM(nn.Module):
 	def is_dummy(self):
 		return self.dummy
 
-	def get_x_mod(self, x, time):
+	def get_x_mod(self, x, time, onehot):
 		if self.is_dummy():
 			x_mod = x*1+0 # for ablation
 		else:
-			temporal_encoding = self.temporal_encoder(time) # (n,t,2M)
+			temporal_encoding = self.temporal_encoder(time, onehot) # (n,t,2M)
 			gamma, beta = self.gamma_beta_f(temporal_encoding) # (n,t,2M)>(n,t,2K)>(n,t,K),(n,t,K)
-			x_mod = torch.tanh(gamma)*x+beta # element-wise modulation
+			x_mod = torch.tanh(gamma)*x+beta if self.uses_tanh else gamma*x+beta # element-wise modulation
 		return x_mod
 
-	def forward(self, x, time, **kwargs):
-		# x: (n,t,f)
-		# time: (n,t)
+	def forward(self, x, time, onehot, **kwargs):
+		'''
+		x: (n,t,f)
+		time: (n,t)
+		onehot: (n,t)
+		'''
 		assert x.shape[-1]==self.input_dims
-		new_onehot = onehot.clone()
-		new_onehot[:,0] = True # forced to avoid errors of empty bands sequences
-		
-		x = self.get_x_mod(x, time)
+
+		x = self.get_x_mod(x, time, onehot)
 		x = x.permute(0,2,1) # (n,t,f)>(n,f,t)
 		x = self.cnn(self.cnn_pad(x)) # (n,f,t)
 		x = x.permute(0,2,1) # (n,f,t)>(n,t,f)
 
 		x = self.activation_f(x) # (n,t,f)>(n,t,f)
-		x = seq_utils.seq_clean(x, new_onehot) if self.uses_clean_seq else x # (n,t,f)>(n,t,f)
+		# print(new_onehot[0,:])
+		# print(x[0,:,0])
+
+		if not self.padding_value is None:
+			new_onehot = utils.get_onehot_clone(onehot) # (n,t)
+			new_onehot[:,0] = True # forced to avoid errors of empty bands sequences
+			x = seq_utils.seq_clean(x, new_onehot, padding_value=self.padding_value) # (n,t,f)>(n,t,f)
+
+		# print(x[0,:,0])
 		# if self.training:
 		# 	print('x1',x[0,0,:10])
 		# 	print('x2',x[0,-1,:10])
@@ -306,8 +329,9 @@ class TimeFILM(nn.Module):
 			'\ntemporal_encoder':f'{self.temporal_encoder}\n',
 			'kernel_size':self.kernel_size,
 			'input_dims':self.input_dims,
-			'uses_clean_seq':self.uses_clean_seq,
 			'relu_negative_slope':self.relu_negative_slope,
+			'padding_value':self.padding_value,
+			'uses_tanh':self.uses_tanh,
 			}, ', ', '=')
 		return txt
 

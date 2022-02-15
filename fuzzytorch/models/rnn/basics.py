@@ -225,7 +225,7 @@ class MLRNN(nn.Module):
 
 		self.max_curve_length = x.shape[1]
 		extra_info = {} # unused
-		new_onehot = onehot.clone()
+		new_onehot = utils.get_onehot_clone(onehot)
 		new_onehot[:,0] = True # forced to avoid errors of empty bands sequences
 		lengths = new_onehot.sum(dim=-1)
 		cpu_lengths = lengths.detach().to('cpu') # lengths needs to be in cpu, is there a fix to this slow operation?
