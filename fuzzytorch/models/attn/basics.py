@@ -270,7 +270,6 @@ class MLSelfAttn(nn.Module):
 		mhselfattn_norm_mode=MHSELFATTN_NORM_MODE,
 		mlp_norm_mode=MLP_NORM_MODE,
 		padding_value=PADDING_VALUE,
-		hardcodes_rnn=False,
 		**kwargs):
 		super().__init__()
 
@@ -298,7 +297,6 @@ class MLSelfAttn(nn.Module):
 		self.mhselfattn_norm_mode = mhselfattn_norm_mode
 		self.mlp_norm_mode = mlp_norm_mode
 		self.padding_value = padding_value
-		self.hardcodes_rnn = hardcodes_rnn
 
 		### MODULES
 		self.self_attns = nn.ModuleList()
@@ -320,10 +318,6 @@ class MLSelfAttn(nn.Module):
 				padding_value=self.padding_value,
 				)
 			self.self_attns += [self_attn]
-
-		if self.hardcodes_rnn: # sanity_check
-			self.rnn = ft_rnn.MLGRU(self.input_dims, self.output_dims, embd_dims_list)
-			print('RNN SANITY CHECK', self.rnn)
 
 		self.reset()
 
@@ -348,16 +342,6 @@ class MLSelfAttn(nn.Module):
 		txt += f'({len(self):,}[p])'
 		return txt
 
-	# def sanity_check_rnn_forward(self, x, onehot,
-	# 	return_only_actual_scores=False,
-	# 	**kwargs):
-	# 	x, _ = self.rnn(x, onehot) 
-	# 	for k,self_attn in enumerate(self.self_attns):
-	# 		_, scores = self_attn(x, onehot,
-	# 			return_only_actual_scores=return_only_actual_scores,
-	# 			**kwargs)
-	# 	return x, scores
-
 	def forward(self, x, onehot,
 		return_only_actual_scores=False,
 		**kwargs):
@@ -377,22 +361,19 @@ class MLSelfAttn(nn.Module):
 		assert x.shape[:-1]==onehot.shape
 		assert len(x.shape)==3
 
-		if self.hardcodes_rnn: # sanity_check
-			assert 0, 'not implemented'
-		else:
-			scores = []
-			for k,self_attn in enumerate(self.self_attns):
-				x, _scores = self_attn(x, onehot, # (n,t,f)>(n,t,f)
-					return_only_actual_scores=return_only_actual_scores,
-					**kwargs)
-				scores += [_scores[:,None,...]]
-			scores = torch.cat(scores, dim=1)
-			return x, scores
+		scores = []
+		for k,self_attn in enumerate(self.self_attns):
+			x, _scores = self_attn(x, onehot, # (n,t,f)>(n,t,f)
+				return_only_actual_scores=return_only_actual_scores,
+				**kwargs)
+			scores += [_scores[:,None,...]]
+		scores = torch.cat(scores, dim=1)
+		return x, scores
 
 ###################################################################################################################################################
 
 class MLTimeSelfAttn(nn.Module):
-	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, te_features, max_te_period,
+	def __init__(self, input_dims:int, output_dims:int, embd_dims_list:list, te_features, max_period,
 		kernel_size=1,
 		time_noise_window=0,
 		removes_time_offset=REMOVES_TIME_OFFSET,
@@ -409,7 +390,6 @@ class MLTimeSelfAttn(nn.Module):
 		mhselfattn_norm_mode=MHSELFATTN_NORM_MODE,
 		mlp_norm_mode=MLP_NORM_MODE,
 		padding_value=PADDING_VALUE,
-		hardcodes_rnn=False,
 		**kwargs):
 		super().__init__()
 
@@ -425,7 +405,7 @@ class MLTimeSelfAttn(nn.Module):
 		self.output_dims = output_dims
 		self.embd_dims_list = embd_dims_list
 		self.te_features = te_features
-		self.max_te_period = max_te_period
+		self.max_period = max_period
 		self.kernel_size = kernel_size
 		self.time_noise_window = time_noise_window
 		self.removes_time_offset = removes_time_offset
@@ -442,10 +422,9 @@ class MLTimeSelfAttn(nn.Module):
 		self.mhselfattn_norm_mode = mhselfattn_norm_mode
 		self.mlp_norm_mode = mlp_norm_mode
 		self.padding_value = padding_value
-		self.hardcodes_rnn = hardcodes_rnn
 
 		### MODULES
-		self.te_film = TimeFILM(self.input_dims, self.te_features, self.max_te_period,
+		self.time_film = TimeFILM(self.input_dims, self.te_features, self.max_period,
 			kernel_size=self.kernel_size,
 			time_noise_window=self.time_noise_window,
 			removes_time_offset=self.removes_time_offset,
@@ -465,13 +444,12 @@ class MLTimeSelfAttn(nn.Module):
 			mhselfattn_norm_mode=self.mhselfattn_norm_mode,
 			mlp_norm_mode=self.mlp_norm_mode,
 			padding_value=self.padding_value,
-			hardcodes_rnn=self.hardcodes_rnn,
 			**kwargs)
 
 		self.reset()
 
 	def reset(self):
-		self.te_film.reset()
+		self.time_film.reset()
 		self.ml_self_attn.reset()
 
 	def get_embd_dims_list(self):
@@ -483,7 +461,7 @@ class MLTimeSelfAttn(nn.Module):
 
 	def extra_repr(self):
 		txt = strings.get_string_from_dict({
-			'\nte_film':f'{self.te_film}\n',
+			'\ntime_film':f'{self.time_film}\n',
 			'ml_self_attn':f'{self.ml_self_attn}\n',
 			}, ', ', '=')
 		return txt
@@ -495,7 +473,7 @@ class MLTimeSelfAttn(nn.Module):
 
 	def get_info(self):
 		return {
-			'te_film':self.te_film.get_info(),
+			'time_film':self.time_film.get_info(),
 			}
 
 	def forward(self, x, onehot, time,
@@ -519,7 +497,7 @@ class MLTimeSelfAttn(nn.Module):
 		assert len(x.shape)==3
 		assert len(time.shape)==2
 
-		x = self.te_film(x, time, onehot) # (n,t,f)>(n,t,f)
+		x = self.time_film(x, time, onehot) # (n,t,f)>(n,t,f)
 		x, scores = self.ml_self_attn(x, onehot, # (n,t,f)>(n,t,f)
 			return_only_actual_scores=return_only_actual_scores,
 			**kwargs)
