@@ -303,22 +303,12 @@ class TimeFILM(nn.Module):
 		x = x.permute(0,2,1) # (n,t,f)>(n,f,t)
 		x = self.cnn(self.cnn_pad(x)) # (n,f,t)
 		x = x.permute(0,2,1) # (n,f,t)>(n,t,f)
-
 		x = self.activation_f(x) # (n,t,f)>(n,t,f)
-		# print(new_onehot[0,:])
-		# print(x[0,:,0])
 
 		if not self.padding_value is None:
 			new_onehot = utils.get_onehot_clone(onehot) # (n,t)
 			new_onehot[:,0] = True # forced to avoid errors of empty bands sequences
 			x = seq_utils.seq_clean(x, new_onehot, padding_value=self.padding_value) # (n,t,f)>(n,t,f)
-
-		# print(x[0,:,0])
-		# if self.training:
-		# 	print('x1',x[0,0,:10])
-		# 	print('x2',x[0,-1,:10])
-		# 	x.register_hook(lambda grad: print('grad1', grad[0,0,:10]))
-		# 	x.register_hook(lambda grad: print('grad2', grad[0,-1,:10]))
 		return x
 
 	def __len__(self):
