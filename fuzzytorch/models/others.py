@@ -83,7 +83,7 @@ class TemporalEncoder(nn.Module):
 	def __init__(self, te_features, max_te_period,
 		min_te_period=None,
 		time_noise_window=0, # regularization in time units
-		init_k_exp=.5,
+		init_k_exp=.0,
 		ws_phases_requires_grad=WS_PHASES_REQUIRES_GRAD,
 		removes_time_offset=REMOVES_TIME_OFFSET,
 		padding_value=PADDING_VALUE,
@@ -226,6 +226,7 @@ class TimeFILM(nn.Module):
 		relu_negative_slope=RELU_NEGATIVE_SLOPE,
 		padding_value=PADDING_VALUE,
 		uses_tanh=True,
+		init_k_exp=.5,
 		**kwargs):
 		super().__init__()
 		### CHECKS
@@ -239,6 +240,7 @@ class TimeFILM(nn.Module):
 		self.relu_negative_slope = relu_negative_slope
 		self.padding_value = padding_value
 		self.uses_tanh = uses_tanh
+		self.init_k_exp = init_k_exp
 		self.reset()
 
 	def reset(self):
@@ -251,6 +253,7 @@ class TimeFILM(nn.Module):
 				time_noise_window=self.time_noise_window,
 				removes_time_offset=self.removes_time_offset,
 				padding_value=self.padding_value,
+				init_k_exp=self.init_k_exp,
 				)
 			
 			self.gamma_beta_f = Linear(self.te_features, self.input_dims,
@@ -322,6 +325,7 @@ class TimeFILM(nn.Module):
 			'relu_negative_slope':self.relu_negative_slope,
 			'padding_value':self.padding_value,
 			'uses_tanh':self.uses_tanh,
+			'init_k_exp':self.init_k_exp,
 			}, ', ', '=')
 		return txt
 
