@@ -324,6 +324,8 @@ class ModelTrainHandler(object):
 	def load_model(self,
 		target_id:str=None,
 		target_epoch:int=None,
+		keys_to_change_d={},
+		keys_to_delete=[],
 		):
 		if target_id is None:
 			target_id = self.id
@@ -352,6 +354,15 @@ class ModelTrainHandler(object):
 
 		loaded_dic = torch.load(to_load_filedir, map_location=self.device)
 		state_dict = loaded_dic['state_dict']
+		
+		new_state_dict = {}
+		for k in state_dict.keys():
+			if not k in keys_to_delete:
+				new_k = k
+				for _k in keys_to_change_d.keys():
+					new_k = new_k.replace(_k, keys_to_change_d[_k])
+				new_state_dict[new_k] = state_dict[k]
+		state_dict = new_state_dict
 
 		self.model.load_state_dict(state_dict)
 		for lmonitor in self.lmonitors:

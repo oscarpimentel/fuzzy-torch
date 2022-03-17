@@ -33,8 +33,3 @@ class FTFile(PFile):
 			torch.save(self.file, filedir)
 		self.last_state = 'saved'
 		return
-
-	# @override
-	# def _load(self):
-	# 	file = torch.load(to_load_filedir)
-	# 	return file
