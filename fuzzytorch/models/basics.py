@@ -73,9 +73,15 @@ class ResidualBlockHandler(nn.Module):
 		else:
 			fx_args = self.f(x, *f_args, **f_kwargs)
 
-		fx = fx_args[0] if f_returns_tuple else fx_args
+		if f_returns_tuple:
+			assert type(fx_args)==tuple
+			fx = fx_args[0]
+			other_fx_args = fx_args[1:]
+		else:
+			fx = fx_args
+
 		if self.ignore_f:
-			new_x = x+0
+			new_x = x+0 # x=x+f(x)
 		else:
 			new_x = x+self.residual_dropout_f(fx) # x=x+f(x)
 
@@ -85,7 +91,7 @@ class ResidualBlockHandler(nn.Module):
 		new_x = self.activation_f(new_x, dim=-1)
 		assert x.shape==new_x.shape
 		if f_returns_tuple:
-			return tuple([new_x])+fx_args[1:]
+			return tuple([new_x])+other_fx_args
 		else:
 			return new_x
 
