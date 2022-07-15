@@ -1,3 +1,11 @@
+*.secrets*
+*.pyc*
+*.ipynb_checkpoints*
+*__pycache__*
+*.vscode*
+*.egg-info*
 temp/
-data/
 save/
+data/
+extras/
+dist/
